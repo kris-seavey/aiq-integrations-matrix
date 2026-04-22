@@ -17,11 +17,13 @@ type FeatureRow = {
   feature_id: string;
   feature_name: string;
   display_order: number | null;
-  section: {
-    section_id: string;
-    section_name: string;
-    display_order: number | null;
-  } | null;
+  section:
+  | {
+      section_id: string;
+      section_name: string;
+      display_order: number | null;
+    }[]
+  | null;
   support:
     | {
         integration_id: string;
@@ -182,23 +184,25 @@ export default function AdminPage() {
       return;
     }
 
-    const mapped: EditorRow[] = (data as FeatureRow[]).map((f) => {
-      const supportRows = Array.isArray(f.support) ? f.support : [];
-      const support = supportRows.find(
-        (x) => x.integration_id === integration.integration_id
-      );
+const mapped: EditorRow[] = (data as unknown as FeatureRow[]).map((f) => {
+  const supportRows = Array.isArray(f.support) ? f.support : [];
+  const support = supportRows.find(
+    (x) => x.integration_id === integration.integration_id
+  );
 
-      return {
-        feature_id: f.feature_id,
-        feature_name: f.feature_name,
-        feature_order: f.display_order ?? 9999,
-        section_id: f.section?.section_id ?? "unsectioned",
-        section_name: f.section?.section_name ?? "Unsectioned",
-        section_order: f.section?.display_order ?? 9999,
-        support_status: support?.support_status ?? "not_supported",
-        customer_facing_override: support?.customer_facing_override ?? "",
-      };
-    });
+  const sectionRow = Array.isArray(f.section) ? f.section[0] : null;
+
+  return {
+    feature_id: f.feature_id,
+    feature_name: f.feature_name,
+    feature_order: f.display_order ?? 9999,
+    section_id: sectionRow?.section_id ?? "unsectioned",
+    section_name: sectionRow?.section_name ?? "Unsectioned",
+    section_order: sectionRow?.display_order ?? 9999,
+    support_status: support?.support_status ?? "not_supported",
+    customer_facing_override: support?.customer_facing_override ?? "",
+  };
+});
 
     setRows(mapped);
     setStatusMessage(`Loaded ${integration.integration_name}.`);
