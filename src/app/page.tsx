@@ -18,14 +18,18 @@ type PublicFeatureRow = {
   feature_id: string;
   support_status: string | null;
   customer_facing_override: string | null;
-  feature: {
-    feature_name: string;
-    display_order: number | null;
-    section: {
-      section_name: string;
-      display_order: number | null;
-    } | null;
-  } | null;
+  feature:
+    | {
+        feature_name: string;
+        display_order: number | null;
+        section:
+          | {
+              section_name: string;
+              display_order: number | null;
+            }[]
+          | null;
+      }[]
+    | null;
 };
 
 type GroupedRow = {
@@ -111,7 +115,7 @@ export default function PublicIntegrationsPage() {
       return;
     }
 
-    setRows((data || []) as PublicFeatureRow[]);
+   setRows((data || []) as unknown as PublicFeatureRow[]);
     setStatus(`Loaded ${integration.integration_name}.`);
   }
 
@@ -133,40 +137,50 @@ export default function PublicIntegrationsPage() {
   }, [integrations, search]);
 
   const grouped = useMemo(() => {
-    const map = new Map<string, GroupedRow>();
+  const map = new Map<string, GroupedRow>();
 
-    const sorted = [...rows].sort((a, b) => {
-      const aSectionOrder = a.feature?.section?.display_order ?? 9999;
-      const bSectionOrder = b.feature?.section?.display_order ?? 9999;
-      if (aSectionOrder !== bSectionOrder) return aSectionOrder - bSectionOrder;
+  const sorted = [...rows].sort((a, b) => {
+    const aFeature = Array.isArray(a.feature) ? a.feature[0] : null;
+    const bFeature = Array.isArray(b.feature) ? b.feature[0] : null;
 
-      const aFeatureOrder = a.feature?.display_order ?? 9999;
-      const bFeatureOrder = b.feature?.display_order ?? 9999;
-      if (aFeatureOrder !== bFeatureOrder) return aFeatureOrder - bFeatureOrder;
+    const aSection = Array.isArray(aFeature?.section) ? aFeature?.section[0] : null;
+    const bSection = Array.isArray(bFeature?.section) ? bFeature?.section[0] : null;
 
-      return (a.feature?.feature_name || "").localeCompare(b.feature?.feature_name || "");
-    });
+    const aSectionOrder = aSection?.display_order ?? 9999;
+    const bSectionOrder = bSection?.display_order ?? 9999;
+    if (aSectionOrder !== bSectionOrder) return aSectionOrder - bSectionOrder;
 
-    for (const row of sorted) {
-      const sectionName = row.feature?.section?.section_name || "Other";
-      const sectionOrder = row.feature?.section?.display_order ?? 9999;
-      const label = row.customer_facing_override?.trim() || row.feature?.feature_name || "";
+    const aFeatureOrder = aFeature?.display_order ?? 9999;
+    const bFeatureOrder = bFeature?.display_order ?? 9999;
+    if (aFeatureOrder !== bFeatureOrder) return aFeatureOrder - bFeatureOrder;
 
-      if (!map.has(sectionName)) {
-        map.set(sectionName, {
-          section_name: sectionName,
-          section_order: sectionOrder,
-          items: [],
-        });
-      }
+    return (aFeature?.feature_name || "").localeCompare(bFeature?.feature_name || "");
+  });
 
-      if (label) {
-        map.get(sectionName)!.items.push(label);
-      }
+  for (const row of sorted) {
+    const featureRow = Array.isArray(row.feature) ? row.feature[0] : null;
+    const sectionRow = Array.isArray(featureRow?.section) ? featureRow?.section[0] : null;
+
+    const sectionName = sectionRow?.section_name || "Other";
+    const sectionOrder = sectionRow?.display_order ?? 9999;
+    const label =
+      row.customer_facing_override?.trim() || featureRow?.feature_name || "";
+
+    if (!map.has(sectionName)) {
+      map.set(sectionName, {
+        section_name: sectionName,
+        section_order: sectionOrder,
+        items: [],
+      });
     }
 
-    return [...map.values()].sort((a, b) => a.section_order - b.section_order);
-  }, [rows]);
+    if (label) {
+      map.get(sectionName)!.items.push(label);
+    }
+  }
+
+  return [...map.values()].sort((a, b) => a.section_order - b.section_order);
+}, [rows]);
 
   return (
     <main className="min-h-screen bg-[#0B0B1F] text-white">
