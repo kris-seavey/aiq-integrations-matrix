@@ -18,13 +18,12 @@ type FeatureRecord = {
   feature_name: string;
   display_order: number | null;
   section_id: string | null;
-  section:
-    | {
-        section_id: string;
-        section_name: string;
-        display_order: number | null;
-      }[]
-    | null;
+};
+
+type SectionRecord = {
+  section_id: string;
+  section_name: string;
+  display_order: number | null;
 };
 
 type SupportRecord = {
@@ -161,80 +160,94 @@ export default function AdminPage() {
   }
 
   async function loadIntegration(integration: Integration) {
-    setSelectedIntegration(integration);
-    setDirty({});
-    setStatusMessage(`Loading ${integration.integration_name}...`);
+  setSelectedIntegration(integration);
+  setDirty({});
+  setStatusMessage(`Loading ${integration.integration_name}...`);
 
-    const [
-      { data: featureData, error: featureError },
-      { data: supportData, error: supportError },
-    ] = await Promise.all([
-      supabase
-        .from("features")
-        .select(`
-          feature_id,
-          feature_name,
-          display_order,
-          section_id,
-          section:sections!features_section_id_fkey(
-            section_id,
-            section_name,
-            display_order
-          )
-        `)
-        .order("display_order", { ascending: true }),
-      supabase
-        .from("integration_feature_support")
-        .select(`
-          integration_id,
-          feature_id,
-          support_status,
-          customer_facing_override
-        `)
-        .eq("integration_id", integration.integration_id),
-    ]);
+  const [
+    { data: featureData, error: featureError },
+    { data: supportData, error: supportError },
+    { data: sectionData, error: sectionError },
+  ] = await Promise.all([
+    supabase
+      .from("features")
+      .select(`
+        feature_id,
+        feature_name,
+        display_order,
+        section_id
+      `)
+      .order("display_order", { ascending: true }),
+    supabase
+      .from("integration_feature_support")
+      .select(`
+        integration_id,
+        feature_id,
+        support_status,
+        customer_facing_override
+      `)
+      .eq("integration_id", integration.integration_id),
+    supabase
+      .from("sections")
+      .select(`
+        section_id,
+        section_name,
+        display_order
+      `)
+      .order("display_order", { ascending: true }),
+  ]);
 
-    if (featureError) {
-      setStatusMessage(`Failed to load features: ${featureError.message}`);
-      setRows([]);
-      return;
-    }
-
-    if (supportError) {
-      setStatusMessage(`Failed to load support rows: ${supportError.message}`);
-      setRows([]);
-      return;
-    }
-
-    const features = (featureData || []) as unknown as FeatureRecord[];
-    const supportRows = (supportData || []) as SupportRecord[];
-
-    const supportMap = new Map(
-      supportRows.map((row) => [row.feature_id, row])
-    );
-
-    const mapped: EditorRow[] = features.map((feature) => {
-      const support = supportMap.get(feature.feature_id);
-      const sectionRow = Array.isArray(feature.section)
-        ? feature.section[0]
-        : null;
-
-      return {
-        feature_id: feature.feature_id,
-        feature_name: feature.feature_name,
-        feature_order: feature.display_order ?? 9999,
-        section_id: feature.section_id ?? sectionRow?.section_id ?? "unsectioned",
-        section_name: sectionRow?.section_name ?? "Unsectioned",
-        section_order: sectionRow?.display_order ?? 9999,
-        support_status: support?.support_status ?? "not_supported",
-        customer_facing_override: support?.customer_facing_override ?? "",
-      };
-    });
-
-    setRows(mapped);
-    setStatusMessage(`Loaded ${integration.integration_name}.`);
+  if (featureError) {
+    setStatusMessage(`Failed to load features: ${featureError.message}`);
+    setRows([]);
+    return;
   }
 
+  if (supportError) {
+    setStatusMessage(`Failed to load support rows: ${supportError.message}`);
+    setRows([]);
+    return;
+  }
+
+  if (sectionError) {
+    setStatusMessage(`Failed to load sections: ${sectionError.message}`);
+    setRows([]);
+    return;
+  }
+
+  const features = (featureData || []) as FeatureRecord[];
+  const supportRows = (supportData || []) as SupportRecord[];
+  const sections = (sectionData || []) as SectionRecord[];
+
+  const supportMap = new Map(
+    supportRows.map((row) => [row.feature_id, row])
+  );
+
+  const sectionMap = new Map(
+    sections.map((section) => [section.section_id, section])
+  );
+
+  const mapped: EditorRow[] = features.map((feature) => {
+    const support = supportMap.get(feature.feature_id);
+    const section = feature.section_id
+      ? sectionMap.get(feature.section_id)
+      : null;
+
+    return {
+      feature_id: feature.feature_id,
+      feature_name: feature.feature_name,
+      feature_order: feature.display_order ?? 9999,
+      section_id: feature.section_id ?? "unsectioned",
+      section_name: section?.section_name ?? "Unsectioned",
+      section_order: section?.display_order ?? 9999,
+      support_status: support?.support_status ?? "not_supported",
+      customer_facing_override: support?.customer_facing_override ?? "",
+    };
+  });
+
+  setRows(mapped);
+  setStatusMessage(`Loaded ${integration.integration_name}.`);
+}
   const filteredIntegrations = useMemo(() => {
     const q = search.trim().toLowerCase();
     if (!q) return integrations;
