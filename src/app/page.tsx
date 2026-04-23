@@ -424,9 +424,6 @@ export default function PublicIntegrationsPage() {
                           </span>
                         )}
 
-                        <span className="rounded-full border border-[#E2E6ED] bg-[#FAFBFC] px-3 py-1.5 text-[13px] font-medium text-[#626875]">
-                          Updated {formatDate(selectedIntegration.updated_at)}
-                        </span>
                       </div>
                     </div>
 
