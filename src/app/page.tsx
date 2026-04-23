@@ -33,19 +33,20 @@ type SupportRecord = {
   customer_facing_override: string | null;
 };
 
-type PublicFeatureRow = {
+type DisplayFeatureRow = {
   feature_id: string;
   feature_name: string;
+  label: string;
   feature_order: number;
   section_name: string;
   section_order: number;
-  label: string;
+  isSupported: boolean;
 };
 
 type GroupedRow = {
   section_name: string;
   section_order: number;
-  items: string[];
+  items: DisplayFeatureRow[];
 };
 
 function formatDate(value?: string | null) {
@@ -62,52 +63,33 @@ function categoryLabel(category?: string | null) {
 export default function PublicIntegrationsPage() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
-  const [rows, setRows] = useState<PublicFeatureRow[]>([]);
+  const [allFeatures, setAllFeatures] = useState<FeatureRecord[]>([]);
+  const [allSections, setAllSections] = useState<SectionRecord[]>([]);
+  const [rows, setRows] = useState<DisplayFeatureRow[]>([]);
   const [status, setStatus] = useState("Loading public integrations...");
   const [loading, setLoading] = useState(true);
+  const [loadingIntegration, setLoadingIntegration] = useState(false);
   const [search, setSearch] = useState("");
+  const [viewAllFeatures, setViewAllFeatures] = useState(false);
 
   useEffect(() => {
-    loadIntegrations();
+    loadInitialData();
   }, []);
 
-  async function loadIntegrations() {
+  async function loadInitialData() {
     setLoading(true);
-
-    const { data, error } = await supabase
-      .from("integrations")
-      .select("integration_id, integration_name, category, status, public_visibility, updated_at")
-      .eq("public_visibility", true)
-      .order("integration_name");
-
-    if (error) {
-      setStatus(`Failed to load integrations: ${error.message}`);
-      setLoading(false);
-      return;
-    }
-
-    const list = (data || []) as Integration[];
-    setIntegrations(list);
-    setStatus(`Loaded ${list.length} public integrations.`);
-    setLoading(false);
-
-    if (list.length > 0) {
-      loadIntegration(list[0]);
-    } else {
-      setSelectedIntegration(null);
-      setRows([]);
-    }
-  }
-
-  async function loadIntegration(integration: Integration) {
-    setSelectedIntegration(integration);
-    setStatus(`Loading ${integration.integration_name}...`);
+    setStatus("Loading public integrations...");
 
     const [
+      { data: integrationData, error: integrationError },
       { data: featureData, error: featureError },
-      { data: supportData, error: supportError },
       { data: sectionData, error: sectionError },
     ] = await Promise.all([
+      supabase
+        .from("integrations")
+        .select("integration_id, integration_name, category, status, public_visibility, updated_at")
+        .eq("public_visibility", true)
+        .order("integration_name"),
       supabase
         .from("features")
         .select(`
@@ -118,16 +100,6 @@ export default function PublicIntegrationsPage() {
         `)
         .order("display_order", { ascending: true }),
       supabase
-        .from("integration_feature_support")
-        .select(`
-          integration_id,
-          feature_id,
-          support_status,
-          customer_facing_override
-        `)
-        .eq("integration_id", integration.integration_id)
-        .eq("support_status", "supported"),
-      supabase
         .from("sections")
         .select(`
           section_id,
@@ -137,51 +109,96 @@ export default function PublicIntegrationsPage() {
         .order("display_order", { ascending: true }),
     ]);
 
-    if (featureError) {
-      setStatus(`Failed to load features: ${featureError.message}`);
-      setRows([]);
+    if (integrationError) {
+      setStatus(`Failed to load integrations: ${integrationError.message}`);
+      setLoading(false);
       return;
     }
 
-    if (supportError) {
-      setStatus(`Failed to load support rows: ${supportError.message}`);
-      setRows([]);
+    if (featureError) {
+      setStatus(`Failed to load features: ${featureError.message}`);
+      setLoading(false);
       return;
     }
 
     if (sectionError) {
       setStatus(`Failed to load sections: ${sectionError.message}`);
-      setRows([]);
+      setLoading(false);
       return;
     }
 
-    const features = (featureData || []) as FeatureRecord[];
+    const integrationsList = (integrationData || []) as Integration[];
+    const featuresList = (featureData || []) as FeatureRecord[];
+    const sectionsList = (sectionData || []) as SectionRecord[];
+
+    setIntegrations(integrationsList);
+    setAllFeatures(featuresList);
+    setAllSections(sectionsList);
+    setSelectedIntegration(null);
+    setRows([]);
+    setViewAllFeatures(false);
+    setStatus(`Loaded ${integrationsList.length} public integrations.`);
+    setLoading(false);
+  }
+
+  async function loadIntegration(integration: Integration) {
+    setSelectedIntegration(integration);
+    setViewAllFeatures(false);
+    setLoadingIntegration(true);
+    setStatus(`Loading ${integration.integration_name}...`);
+
+    const { data: supportData, error: supportError } = await supabase
+      .from("integration_feature_support")
+      .select(`
+        integration_id,
+        feature_id,
+        support_status,
+        customer_facing_override
+      `)
+      .eq("integration_id", integration.integration_id);
+
+    if (supportError) {
+      setStatus(`Failed to load support rows: ${supportError.message}`);
+      setRows([]);
+      setLoadingIntegration(false);
+      return;
+    }
+
     const supportRows = (supportData || []) as SupportRecord[];
-    const sections = (sectionData || []) as SectionRecord[];
+    const supportMap = new Map(
+      supportRows.map((row) => [row.feature_id, row])
+    );
 
-    const supportMap = new Map(supportRows.map((row) => [row.feature_id, row]));
-    const sectionMap = new Map(sections.map((section) => [section.section_id, section]));
+    const sectionMap = new Map(
+      allSections.map((section) => [section.section_id, section])
+    );
 
-    const mapped = features
-      .map((feature) => {
-        const support = supportMap.get(feature.feature_id);
-        if (!support) return null;
+    const mapped: DisplayFeatureRow[] = allFeatures.map((feature) => {
+      const support = supportMap.get(feature.feature_id);
+      const section = feature.section_id ? sectionMap.get(feature.section_id) : null;
+      const isSupported = support?.support_status === "supported";
 
-        const section = feature.section_id ? sectionMap.get(feature.section_id) : null;
-
-        return {
-          feature_id: feature.feature_id,
-          feature_name: feature.feature_name,
-          feature_order: feature.display_order ?? 9999,
-          section_name: section?.section_name ?? "Other",
-          section_order: section?.display_order ?? 9999,
-          label: support.customer_facing_override?.trim() || feature.feature_name,
-        };
-      })
-      .filter(Boolean) as PublicFeatureRow[];
+      return {
+        feature_id: feature.feature_id,
+        feature_name: feature.feature_name,
+        label: support?.customer_facing_override?.trim() || feature.feature_name,
+        feature_order: feature.display_order ?? 9999,
+        section_name: section?.section_name ?? "Other",
+        section_order: section?.display_order ?? 9999,
+        isSupported,
+      };
+    });
 
     setRows(mapped);
     setStatus(`Loaded ${integration.integration_name}.`);
+    setLoadingIntegration(false);
+  }
+
+  function clearSelection() {
+    setSelectedIntegration(null);
+    setRows([]);
+    setViewAllFeatures(false);
+    setStatus(`Loaded ${integrations.length} public integrations.`);
   }
 
   const filteredIntegrations = useMemo(() => {
@@ -201,10 +218,36 @@ export default function PublicIntegrationsPage() {
     });
   }, [integrations, search]);
 
+  const overviewRows = useMemo(() => {
+    const sectionMap = new Map(
+      allSections.map((section) => [section.section_id, section])
+    );
+
+    return allFeatures.map((feature) => {
+      const section = feature.section_id ? sectionMap.get(feature.section_id) : null;
+
+      return {
+        feature_id: feature.feature_id,
+        feature_name: feature.feature_name,
+        label: feature.feature_name,
+        feature_order: feature.display_order ?? 9999,
+        section_name: section?.section_name ?? "Other",
+        section_order: section?.display_order ?? 9999,
+        isSupported: true,
+      } satisfies DisplayFeatureRow;
+    });
+  }, [allFeatures, allSections]);
+
+  const visibleRows = useMemo(() => {
+    if (!selectedIntegration) return overviewRows;
+    if (viewAllFeatures) return rows;
+    return rows.filter((row) => row.isSupported);
+  }, [overviewRows, rows, selectedIntegration, viewAllFeatures]);
+
   const grouped = useMemo(() => {
     const map = new Map<string, GroupedRow>();
 
-    const sorted = [...rows].sort((a, b) => {
+    const sorted = [...visibleRows].sort((a, b) => {
       if (a.section_order !== b.section_order) {
         return a.section_order - b.section_order;
       }
@@ -223,15 +266,23 @@ export default function PublicIntegrationsPage() {
         });
       }
 
-      map.get(row.section_name)!.items.push(row.label);
+      map.get(row.section_name)!.items.push(row);
     }
 
     return [...map.values()].sort((a, b) => a.section_order - b.section_order);
+  }, [visibleRows]);
+
+  const supportedCount = useMemo(() => {
+    return rows.filter((row) => row.isSupported).length;
+  }, [rows]);
+
+  const unsupportedCount = useMemo(() => {
+    return rows.filter((row) => !row.isSupported).length;
   }, [rows]);
 
   return (
-    <main className="min-h-screen bg-[#FAFBFC] text-[#080808]">
-      <header className="border-b border-[#E2E6ED] bg-white">
+    <main className="min-h-screen bg-[#6262F5] text-white">
+      <header className="border-b border-white/15 bg-[#6262F5]">
         <div className="mx-auto max-w-7xl px-6 py-6">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-4">
@@ -242,23 +293,34 @@ export default function PublicIntegrationsPage() {
               />
 
               <div className="min-w-0">
-                <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#626875]">
+                <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-white/70">
                   AIQ
                 </p>
-                <h1 className="mt-1 text-[30px] font-bold leading-tight text-[#080808]">
+                <h1 className="mt-1 text-[30px] font-bold leading-tight text-white">
                   Integrations Matrix
                 </h1>
-                <p className="mt-2 max-w-3xl text-[16px] leading-6 text-[#626875]">
-                  Explore supported integration capabilities across AIQ using the
-                  current public support configuration.
+                <p className="mt-2 max-w-3xl text-[16px] leading-6 text-white/85">
+                  Browse public integrations and review features by section. Select
+                  an integration from the sidebar to compare supported features
+                  against the full feature reference.
                 </p>
               </div>
             </div>
 
-            <div className="shrink-0">
+            <div className="flex shrink-0 items-center gap-3">
+              {selectedIntegration && (
+                <button
+                  type="button"
+                  onClick={clearSelection}
+                  className="inline-flex items-center justify-center rounded-full border border-white/25 bg-white/10 px-4 py-2 text-[14px] font-semibold text-white transition hover:bg-white/15"
+                >
+                  Back to feature reference
+                </button>
+              )}
+
               <Link
                 href="/admin"
-                className="inline-flex items-center justify-center rounded-full border-2 border-[#6262F5] px-5 py-2.5 text-[14px] font-semibold text-[#6262F5] transition hover:bg-[#6262F5] hover:text-white"
+                className="inline-flex items-center justify-center rounded-full border-2 border-white bg-white px-5 py-2.5 text-[14px] font-semibold text-[#6262F5] transition hover:bg-transparent hover:text-white"
               >
                 Admin login
               </Link>
@@ -269,7 +331,7 @@ export default function PublicIntegrationsPage() {
 
       <div className="mx-auto max-w-7xl px-6 py-8">
         <div className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
-          <aside className="h-fit rounded-2xl border border-[#E2E6ED] bg-white p-5">
+          <aside className="h-fit rounded-2xl border border-white/15 bg-white p-5 text-[#080808] shadow-sm">
             <div>
               <label
                 htmlFor="integration-search"
@@ -332,7 +394,7 @@ export default function PublicIntegrationsPage() {
             </div>
           </aside>
 
-          <section className="rounded-2xl border border-[#E2E6ED] bg-white p-6 lg:p-8">
+          <section className="rounded-2xl border border-white/15 bg-white p-6 text-[#080808] shadow-sm lg:p-8">
             {loading ? (
               <div className="rounded-xl border border-[#E2E6ED] bg-[#FAFBFC] px-5 py-6 text-[16px] text-[#626875]">
                 Loading...
@@ -363,17 +425,108 @@ export default function PublicIntegrationsPage() {
                         )}
 
                         <span className="rounded-full border border-[#E2E6ED] bg-[#FAFBFC] px-3 py-1.5 text-[13px] font-medium text-[#626875]">
-                          Public
-                        </span>
-
-                        <span className="rounded-full border border-[#E2E6ED] bg-[#FAFBFC] px-3 py-1.5 text-[13px] font-medium text-[#626875]">
                           Updated {formatDate(selectedIntegration.updated_at)}
                         </span>
                       </div>
                     </div>
 
                     <p className="text-[14px] leading-6 text-[#626875]">{status}</p>
+
+                    <div className="flex flex-col gap-4 pt-2 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-full bg-[#EDF0FF] px-3 py-1.5 text-[13px] font-medium text-[#6262F5]">
+                          {supportedCount} supported
+                        </span>
+
+                        {viewAllFeatures && (
+                          <span className="rounded-full bg-[#F4F6FA] px-3 py-1.5 text-[13px] font-medium text-[#626875]">
+                            {unsupportedCount} unsupported
+                          </span>
+                        )}
+                      </div>
+
+                      <label className="inline-flex items-center gap-3 text-[14px] font-medium text-[#626875]">
+                        <span>View All Features</span>
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={viewAllFeatures}
+                          onClick={() => setViewAllFeatures((prev) => !prev)}
+                          className={`relative inline-flex h-7 w-12 items-center rounded-full transition ${
+                            viewAllFeatures ? "bg-[#6262F5]" : "bg-[#D6DBE5]"
+                          }`}
+                        >
+                          <span
+                            className={`inline-block h-5 w-5 transform rounded-full bg-white transition ${
+                              viewAllFeatures ? "translate-x-6" : "translate-x-1"
+                            }`}
+                          />
+                        </button>
+                      </label>
+                    </div>
                   </div>
+                </div>
+
+                <div className="mt-8 space-y-8">
+                  {loadingIntegration ? (
+                    <div className="rounded-xl border border-[#E2E6ED] bg-[#FAFBFC] px-5 py-6 text-[16px] text-[#626875]">
+                      Loading integration details...
+                    </div>
+                  ) : grouped.length > 0 ? (
+                    grouped.map((group) => (
+                      <section key={group.section_name} className="space-y-4">
+                        <div className="flex flex-col gap-2 border-b border-[#E2E6ED] pb-3 sm:flex-row sm:items-center sm:justify-between">
+                          <h3 className="text-[24px] font-bold leading-tight text-[#080808]">
+                            {group.section_name}
+                          </h3>
+                          <span className="text-[13px] font-medium text-[#626875]">
+                            {group.items.filter((item) => item.isSupported).length} supported
+                            {viewAllFeatures ? ` · ${group.items.length} total` : ""}
+                          </span>
+                        </div>
+
+                        <ul className="space-y-2 pl-5">
+                          {group.items.map((item) => (
+                            <li
+                              key={item.feature_id}
+                              className={`text-[16px] leading-6 ${
+                                item.isSupported
+                                  ? "text-[#080808] marker:text-[#6262F5]"
+                                  : "text-[#7F8794] marker:text-[#C0C7D4]"
+                              }`}
+                            >
+                              <span>{item.label}</span>
+                              {!item.isSupported && (
+                                <span className="ml-2 rounded-full bg-[#F4F6FA] px-2 py-0.5 text-[12px] font-medium text-[#7F8794]">
+                                  Not supported
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      </section>
+                    ))
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-[#D7DCE5] bg-[#FAFBFC] px-5 py-8 text-[16px] text-[#626875]">
+                      No supported features available to display.
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="border-b border-[#E2E6ED] pb-6">
+                  <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-[#626875]">
+                    Feature reference
+                  </p>
+                  <h2 className="mt-2 text-[30px] font-bold leading-tight text-[#080808]">
+                    All feature sections
+                  </h2>
+                  <p className="mt-3 max-w-3xl text-[16px] leading-6 text-[#626875]">
+                    Use this as a reference key for all available features in the
+                    matrix. Select an integration from the left to view supported
+                    features only, or compare against the full feature set.
+                  </p>
                 </div>
 
                 <div className="mt-8 space-y-8">
@@ -384,34 +537,30 @@ export default function PublicIntegrationsPage() {
                           {group.section_name}
                         </h3>
                         <span className="text-[13px] font-medium text-[#626875]">
-                          {group.items.length} supported
+                          {group.items.length} features
                         </span>
                       </div>
 
-                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                        {group.items.map((item, idx) => (
-                          <div
-                            key={`${group.section_name}-${idx}`}
-                            className="rounded-xl border border-[#E2E6ED] bg-[#FAFBFC] px-4 py-3 text-[16px] leading-6 text-[#080808]"
+                      <ul className="space-y-2 pl-5">
+                        {group.items.map((item) => (
+                          <li
+                            key={item.feature_id}
+                            className="text-[16px] leading-6 text-[#080808] marker:text-[#6262F5]"
                           >
-                            {item}
-                          </div>
+                            {item.label}
+                          </li>
                         ))}
-                      </div>
+                      </ul>
                     </section>
                   ))}
 
                   {grouped.length === 0 && (
                     <div className="rounded-xl border border-dashed border-[#D7DCE5] bg-[#FAFBFC] px-5 py-8 text-[16px] text-[#626875]">
-                      No supported features available to display.
+                      No features available to display.
                     </div>
                   )}
                 </div>
               </>
-            ) : (
-              <div className="rounded-xl border border-[#E2E6ED] bg-[#FAFBFC] px-5 py-6 text-[16px] text-[#626875]">
-                Select an integration.
-              </div>
             )}
           </section>
         </div>
