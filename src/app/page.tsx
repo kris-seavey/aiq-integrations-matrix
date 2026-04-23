@@ -159,22 +159,15 @@ export default function PublicIntegrationsPage() {
     const supportRows = (supportData || []) as SupportRecord[];
     const sections = (sectionData || []) as SectionRecord[];
 
-    const supportMap = new Map(
-      supportRows.map((row) => [row.feature_id, row])
-    );
-
-    const sectionMap = new Map(
-      sections.map((section) => [section.section_id, section])
-    );
+    const supportMap = new Map(supportRows.map((row) => [row.feature_id, row]));
+    const sectionMap = new Map(sections.map((section) => [section.section_id, section]));
 
     const mapped = features
       .map((feature) => {
         const support = supportMap.get(feature.feature_id);
         if (!support) return null;
 
-        const section = feature.section_id
-          ? sectionMap.get(feature.section_id)
-          : null;
+        const section = feature.section_id ? sectionMap.get(feature.section_id) : null;
 
         return {
           feature_id: feature.feature_id,
@@ -237,36 +230,35 @@ export default function PublicIntegrationsPage() {
   }, [rows]);
 
   return (
-    <main className="min-h-screen bg-[#0B0B1F] text-white">
-      <header className="border-b border-white/10 bg-[#0B0B1F]">
-        <div className="mx-auto max-w-7xl px-6 py-5">
-          <div className="rounded-2xl border border-white/10 bg-gradient-to-r from-[#6C63FF]/20 via-[#6C63FF]/5 to-transparent px-6 py-5">
-            <div className="flex items-start justify-between gap-6">
-              <div>
-                <div className="mb-3 flex items-center gap-4">
-                  <img
-                    src="/aiq-logo.svg"
-                    alt="Alpine IQ"
-                    className="h-14 w-auto object-contain"
-                  />
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.18em] text-white/50">
-                      ALPINE IQ
-                    </p>
-                    <h1 className="text-3xl font-semibold">Integrations Matrix</h1>
-                  </div>
-                </div>
+    <main className="min-h-screen bg-[#FAFBFC] text-[#080808]">
+      <header className="border-b border-[#E2E6ED] bg-white">
+        <div className="mx-auto max-w-7xl px-6 py-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-start gap-4">
+              <img
+                src="/aiq-logo.svg"
+                alt="AIQ"
+                className="h-10 w-auto object-contain"
+              />
 
-                <p className="max-w-3xl text-sm text-white/70">
-                  Explore supported integration capabilities across Alpine IQ.
-                  This public view is powered by the same source of truth that
-                  updates internal documentation and Intercom automatically.
+              <div className="min-w-0">
+                <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#626875]">
+                  AIQ
+                </p>
+                <h1 className="mt-1 text-[30px] font-bold leading-tight text-[#080808]">
+                  Integrations Matrix
+                </h1>
+                <p className="mt-2 max-w-3xl text-[16px] leading-6 text-[#626875]">
+                  Explore supported integration capabilities across AIQ using the
+                  current public support configuration.
                 </p>
               </div>
+            </div>
 
+            <div className="shrink-0">
               <Link
                 href="/admin"
-                className="shrink-0 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm text-white/60 transition hover:bg-white/10 hover:text-white"
+                className="inline-flex items-center justify-center rounded-full border-2 border-[#6262F5] px-5 py-2.5 text-[14px] font-semibold text-[#6262F5] transition hover:bg-[#6262F5] hover:text-white"
               >
                 Admin login
               </Link>
@@ -275,115 +267,154 @@ export default function PublicIntegrationsPage() {
         </div>
       </header>
 
-      <div className="mx-auto grid max-w-7xl grid-cols-[300px_1fr] gap-6 px-6 py-6">
-        <aside className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
-          <div className="mb-4">
-            <h2 className="mb-2 text-xs uppercase tracking-wide text-white/50">
-              Search integrations
-            </h2>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search by name or category"
-              className="w-full rounded-xl border border-white/10 bg-white/10 px-3 py-2 text-sm text-white placeholder:text-white/35 outline-none focus:border-[#6C63FF] focus:ring-2 focus:ring-[#6C63FF]/40"
-            />
-          </div>
-
-          <div className="mb-3 flex items-center justify-between">
-            <h2 className="text-xs uppercase tracking-wide text-white/50">
-              Integrations
-            </h2>
-            <span className="text-xs text-white/40">{filteredIntegrations.length}</span>
-          </div>
-
-          <div className="space-y-1">
-            {filteredIntegrations.map((integration) => (
-              <button
-                key={integration.integration_id}
-                onClick={() => loadIntegration(integration)}
-                className={`w-full rounded-xl px-3 py-3 text-left text-sm transition ${
-                  selectedIntegration?.integration_id === integration.integration_id
-                    ? "bg-[#6C63FF] text-white"
-                    : "bg-transparent text-white/80 hover:bg-white/10 hover:text-white"
-                }`}
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <div className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
+          <aside className="h-fit rounded-2xl border border-[#E2E6ED] bg-white p-5">
+            <div>
+              <label
+                htmlFor="integration-search"
+                className="mb-2 block text-[12px] font-bold uppercase tracking-[0.12em] text-[#626875]"
               >
-                <div className="font-medium">{integration.integration_name}</div>
-                <div className="mt-1 text-xs opacity-75">
-                  {categoryLabel(integration.category)}
+                Search integrations
+              </label>
+              <input
+                id="integration-search"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search by name or category"
+                className="w-full rounded-lg border border-[#E2E6ED] bg-white px-4 py-3 text-[16px] text-[#080808] outline-none transition placeholder:text-[#A2A6AE] focus:border-[#6262F5]"
+              />
+            </div>
+
+            <div className="mt-6 flex items-center justify-between border-t border-[#E2E6ED] pt-5">
+              <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-[#626875]">
+                Integrations
+              </h2>
+              <span className="text-[13px] font-medium text-[#626875]">
+                {filteredIntegrations.length}
+              </span>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              {filteredIntegrations.map((integration) => {
+                const isSelected =
+                  selectedIntegration?.integration_id === integration.integration_id;
+
+                return (
+                  <button
+                    key={integration.integration_id}
+                    onClick={() => loadIntegration(integration)}
+                    className={`w-full rounded-xl border px-4 py-3 text-left transition ${
+                      isSelected
+                        ? "border-[#6262F5] bg-[#6262F5] text-white"
+                        : "border-[#E2E6ED] bg-white text-[#080808] hover:border-[#C9D2E3] hover:bg-[#F4F6FA]"
+                    }`}
+                  >
+                    <div className="text-[16px] font-semibold leading-5">
+                      {integration.integration_name}
+                    </div>
+                    <div
+                      className={`mt-1 text-[13px] ${
+                        isSelected ? "text-white/90" : "text-[#626875]"
+                      }`}
+                    >
+                      {categoryLabel(integration.category)}
+                    </div>
+                  </button>
+                );
+              })}
+
+              {!loading && filteredIntegrations.length === 0 && (
+                <div className="rounded-xl border border-dashed border-[#D7DCE5] bg-[#FAFBFC] px-4 py-5 text-[14px] text-[#626875]">
+                  No integrations match your search.
                 </div>
-              </button>
-            ))}
+              )}
+            </div>
+          </aside>
 
-            {!loading && filteredIntegrations.length === 0 && (
-              <div className="rounded-xl border border-dashed border-white/10 px-3 py-4 text-sm text-white/40">
-                No integrations match your search.
+          <section className="rounded-2xl border border-[#E2E6ED] bg-white p-6 lg:p-8">
+            {loading ? (
+              <div className="rounded-xl border border-[#E2E6ED] bg-[#FAFBFC] px-5 py-6 text-[16px] text-[#626875]">
+                Loading...
               </div>
-            )}
-          </div>
-        </aside>
+            ) : selectedIntegration ? (
+              <>
+                <div className="border-b border-[#E2E6ED] pb-6">
+                  <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                      <div>
+                        <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-[#626875]">
+                          Public integration
+                        </p>
+                        <h2 className="mt-2 text-[30px] font-bold leading-tight text-[#080808]">
+                          {selectedIntegration.integration_name}
+                        </h2>
+                      </div>
 
-        <section className="rounded-2xl border border-white/10 bg-white/5 p-6 backdrop-blur">
-          {loading ? (
-            <p className="text-white/60">Loading...</p>
-          ) : selectedIntegration ? (
-            <>
-              <div className="mb-8">
-                <div className="mb-3 flex flex-wrap items-center gap-2">
-                  <h2 className="text-4xl font-semibold">
-                    {selectedIntegration.integration_name}
-                  </h2>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="rounded-full border border-[#E2E6ED] bg-[#FAFBFC] px-3 py-1.5 text-[13px] font-medium text-[#626875]">
+                          {categoryLabel(selectedIntegration.category)}
+                        </span>
 
-                  <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white/80">
-                    {categoryLabel(selectedIntegration.category)}
-                  </span>
+                        {selectedIntegration.status && (
+                          <span className="rounded-full border border-[#E2E6ED] bg-[#FAFBFC] px-3 py-1.5 text-[13px] font-medium text-[#626875]">
+                            {selectedIntegration.status}
+                          </span>
+                        )}
 
-                  {selectedIntegration.status && (
-                    <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white/80">
-                      {selectedIntegration.status}
-                    </span>
-                  )}
+                        <span className="rounded-full border border-[#E2E6ED] bg-[#FAFBFC] px-3 py-1.5 text-[13px] font-medium text-[#626875]">
+                          Public
+                        </span>
 
-                  <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white/80">
-                    Public
-                  </span>
-
-                  <span className="rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs text-white/70">
-                    Last updated: {formatDate(selectedIntegration.updated_at)}
-                  </span>
-                </div>
-
-                <p className="text-sm text-white/60">{status}</p>
-              </div>
-
-              <div className="space-y-8">
-                {grouped.map((group) => (
-                  <div key={group.section_name}>
-                    <div className="mb-3 flex items-center gap-2">
-                      <h3 className="text-xl font-semibold">{group.section_name}</h3>
-                      <span className="rounded-full bg-[#6C63FF]/20 px-2.5 py-1 text-xs text-[#B6B2FF]">
-                        {group.items.length} supported
-                      </span>
+                        <span className="rounded-full border border-[#E2E6ED] bg-[#FAFBFC] px-3 py-1.5 text-[13px] font-medium text-[#626875]">
+                          Updated {formatDate(selectedIntegration.updated_at)}
+                        </span>
+                      </div>
                     </div>
 
-                    <ul className="list-disc space-y-2 pl-6 text-white/80">
-                      {group.items.map((item, idx) => (
-                        <li key={`${group.section_name}-${idx}`}>{item}</li>
-                      ))}
-                    </ul>
+                    <p className="text-[14px] leading-6 text-[#626875]">{status}</p>
                   </div>
-                ))}
+                </div>
 
-                {grouped.length === 0 && (
-                  <div className="rounded-xl border border-dashed border-white/10 px-4 py-6 text-white/50">
-                    No supported features available to display.
-                  </div>
-                )}
+                <div className="mt-8 space-y-8">
+                  {grouped.map((group) => (
+                    <section key={group.section_name} className="space-y-4">
+                      <div className="flex flex-col gap-2 border-b border-[#E2E6ED] pb-3 sm:flex-row sm:items-center sm:justify-between">
+                        <h3 className="text-[24px] font-bold leading-tight text-[#080808]">
+                          {group.section_name}
+                        </h3>
+                        <span className="text-[13px] font-medium text-[#626875]">
+                          {group.items.length} supported
+                        </span>
+                      </div>
+
+                      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                        {group.items.map((item, idx) => (
+                          <div
+                            key={`${group.section_name}-${idx}`}
+                            className="rounded-xl border border-[#E2E6ED] bg-[#FAFBFC] px-4 py-3 text-[16px] leading-6 text-[#080808]"
+                          >
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                    </section>
+                  ))}
+
+                  {grouped.length === 0 && (
+                    <div className="rounded-xl border border-dashed border-[#D7DCE5] bg-[#FAFBFC] px-5 py-8 text-[16px] text-[#626875]">
+                      No supported features available to display.
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="rounded-xl border border-[#E2E6ED] bg-[#FAFBFC] px-5 py-6 text-[16px] text-[#626875]">
+                Select an integration.
               </div>
-            </>
-          ) : (
-            <p className="text-white/60">Select an integration.</p>
-          )}
-        </section>
+            )}
+          </section>
+        </div>
       </div>
     </main>
   );
