@@ -281,53 +281,53 @@ export default function PublicIntegrationsPage() {
   }, [rows]);
 
   return (
-    <main className="min-h-screen bg-[#6262F5] text-white">
-      <header className="border-b border-white/15 bg-[#6262F5]">
-        <div className="mx-auto max-w-7xl px-6 py-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-start gap-4">
-              <img
-                src="/aiq-logo.svg"
-                alt="AIQ"
-                className="h-10 w-auto object-contain"
-              />
+    <main className="min-h-screen bg-[#6262F5]">
+<header className="border-b border-[#E2E6ED] bg-white">
+  <div className="mx-auto max-w-7xl px-6 py-6">
+    <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+      <div className="flex items-start gap-4">
+        <img
+          src="/aiq-logo.svg"
+          alt="AIQ"
+          className="h-10 w-auto object-contain"
+        />
 
-              <div className="min-w-0">
-                <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-white/70">
-                  AIQ
-                </p>
-                <h1 className="mt-1 text-[30px] font-bold leading-tight text-white">
-                  Integrations Matrix
-                </h1>
-                <p className="mt-2 max-w-3xl text-[16px] leading-6 text-white/85">
-                  Browse public integrations and review features by section. Select
-                  an integration from the sidebar to compare supported features
-                  against the full feature reference.
-                </p>
-              </div>
-            </div>
-
-            <div className="flex shrink-0 items-center gap-3">
-              {selectedIntegration && (
-                <button
-                  type="button"
-                  onClick={clearSelection}
-                  className="inline-flex items-center justify-center rounded-full border border-white/25 bg-white/10 px-4 py-2 text-[14px] font-semibold text-white transition hover:bg-white/15"
-                >
-                  Back to feature reference
-                </button>
-              )}
-
-              <Link
-                href="/admin"
-                className="inline-flex items-center justify-center rounded-full border-2 border-white bg-white px-5 py-2.5 text-[14px] font-semibold text-[#6262F5] transition hover:bg-transparent hover:text-white"
-              >
-                Admin login
-              </Link>
-            </div>
-          </div>
+        <div className="min-w-0">
+          <p className="text-[12px] font-bold uppercase tracking-[0.16em] text-[#626875]">
+            AIQ
+          </p>
+          <h1 className="mt-1 text-[30px] font-bold leading-tight text-[#080808]">
+            Integrations Matrix
+          </h1>
+          <p className="mt-2 max-w-3xl text-[16px] leading-6 text-[#626875]">
+            Browse public integrations and review features by section. Select
+            an integration from the sidebar to compare supported features
+            against the full feature reference.
+          </p>
         </div>
-      </header>
+      </div>
+
+      <div className="flex shrink-0 items-center gap-3">
+        {selectedIntegration && (
+          <button
+            type="button"
+            onClick={clearSelection}
+            className="inline-flex items-center justify-center rounded-full border border-[#D7DCE5] bg-white px-4 py-2 text-[14px] font-semibold text-[#626875] transition hover:bg-[#F4F6FA]"
+          >
+            Back to feature reference
+          </button>
+        )}
+
+        <Link
+          href="/admin"
+          className="inline-flex items-center justify-center rounded-full border-2 border-[#6262F5] bg-white px-5 py-2.5 text-[14px] font-semibold text-[#6262F5] transition hover:bg-[#6262F5] hover:text-white"
+        >
+          Admin login
+        </Link>
+      </div>
+    </div>
+  </div>
+</header>
 
       <div className="mx-auto max-w-7xl px-6 py-8">
         <div className="grid gap-8 lg:grid-cols-[280px_minmax(0,1fr)]">
