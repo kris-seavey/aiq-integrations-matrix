@@ -13,7 +13,7 @@ type Integration = {
   updated_at?: string | null;
 };
 
-type FeatureRow = {
+type FeatureRecord = {
   feature_id: string;
   feature_name: string;
   display_order: number | null;
@@ -25,14 +25,13 @@ type FeatureRow = {
         display_order: number | null;
       }[]
     | null;
-  support:
-    | {
-        integration_id: string;
-        feature_id: string;
-        support_status: string | null;
-        customer_facing_override: string | null;
-      }[]
-    | null;
+};
+
+type SupportRecord = {
+  integration_id: string;
+  feature_id: string;
+  support_status: string | null;
+  customer_facing_override: string | null;
 };
 
 type EditorRow = {
@@ -161,61 +160,80 @@ export default function AdminPage() {
     }
   }
 
-async function loadIntegration(integration: Integration) {
-  setSelectedIntegration(integration);
-  setDirty({});
-  setStatusMessage(`Loading ${integration.integration_name}...`);
+  async function loadIntegration(integration: Integration) {
+    setSelectedIntegration(integration);
+    setDirty({});
+    setStatusMessage(`Loading ${integration.integration_name}...`);
 
-  const { data, error } = await supabase
-    .from("features")
-    .select(`
-      feature_id,
-      feature_name,
-      display_order,
-      section_id,
-      section:sections!features_section_id_fkey(
-        section_id,
-        section_name,
-        display_order
-      ),
-      support:integration_feature_support!left(
-        integration_id,
-        feature_id,
-        support_status,
-        customer_facing_override
-      )
-    `)
-    .order("display_order", { ascending: true });
+    const [
+      { data: featureData, error: featureError },
+      { data: supportData, error: supportError },
+    ] = await Promise.all([
+      supabase
+        .from("features")
+        .select(`
+          feature_id,
+          feature_name,
+          display_order,
+          section_id,
+          section:sections!features_section_id_fkey(
+            section_id,
+            section_name,
+            display_order
+          )
+        `)
+        .order("display_order", { ascending: true }),
+      supabase
+        .from("integration_feature_support")
+        .select(`
+          integration_id,
+          feature_id,
+          support_status,
+          customer_facing_override
+        `)
+        .eq("integration_id", integration.integration_id),
+    ]);
 
-  if (error) {
-    setStatusMessage(`Failed to load features: ${error.message}`);
-    setRows([]);
-    return;
-  }
+    if (featureError) {
+      setStatusMessage(`Failed to load features: ${featureError.message}`);
+      setRows([]);
+      return;
+    }
 
-  const mapped: EditorRow[] = (data as unknown as FeatureRow[]).map((f) => {
-    const supportRows = Array.isArray(f.support) ? f.support : [];
-    const support = supportRows.find(
-      (x) => x.integration_id === integration.integration_id
+    if (supportError) {
+      setStatusMessage(`Failed to load support rows: ${supportError.message}`);
+      setRows([]);
+      return;
+    }
+
+    const features = (featureData || []) as unknown as FeatureRecord[];
+    const supportRows = (supportData || []) as SupportRecord[];
+
+    const supportMap = new Map(
+      supportRows.map((row) => [row.feature_id, row])
     );
 
-    const sectionRow = Array.isArray(f.section) ? f.section[0] : null;
+    const mapped: EditorRow[] = features.map((feature) => {
+      const support = supportMap.get(feature.feature_id);
+      const sectionRow = Array.isArray(feature.section)
+        ? feature.section[0]
+        : null;
 
-    return {
-      feature_id: f.feature_id,
-      feature_name: f.feature_name,
-      feature_order: f.display_order ?? 9999,
-      section_id: f.section_id ?? sectionRow?.section_id ?? "unsectioned",
-      section_name: sectionRow?.section_name ?? "Unsectioned",
-      section_order: sectionRow?.display_order ?? 9999,
-      support_status: support?.support_status ?? "not_supported",
-      customer_facing_override: support?.customer_facing_override ?? "",
-    };
-  });
+      return {
+        feature_id: feature.feature_id,
+        feature_name: feature.feature_name,
+        feature_order: feature.display_order ?? 9999,
+        section_id: feature.section_id ?? sectionRow?.section_id ?? "unsectioned",
+        section_name: sectionRow?.section_name ?? "Unsectioned",
+        section_order: sectionRow?.display_order ?? 9999,
+        support_status: support?.support_status ?? "not_supported",
+        customer_facing_override: support?.customer_facing_override ?? "",
+      };
+    });
 
-  setRows(mapped);
-  setStatusMessage(`Loaded ${integration.integration_name}.`);
-}
+    setRows(mapped);
+    setStatusMessage(`Loaded ${integration.integration_name}.`);
+  }
 
   const filteredIntegrations = useMemo(() => {
     const q = search.trim().toLowerCase();
