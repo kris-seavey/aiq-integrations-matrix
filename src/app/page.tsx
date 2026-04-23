@@ -13,27 +13,17 @@ type Integration = {
   updated_at?: string | null;
 };
 
-type PublicFeatureRow = {
-  feature_id: string;
-  feature_name: string;
-  feature_order: number;
-  section_name: string;
-  section_order: number;
-  label: string;
-};
-
 type FeatureRecord = {
   feature_id: string;
   feature_name: string;
   display_order: number | null;
   section_id: string | null;
-  section:
-    | {
-        section_id: string;
-        section_name: string;
-        display_order: number | null;
-      }[]
-    | null;
+};
+
+type SectionRecord = {
+  section_id: string;
+  section_name: string;
+  display_order: number | null;
 };
 
 type SupportRecord = {
@@ -41,6 +31,15 @@ type SupportRecord = {
   feature_id: string;
   support_status: string | null;
   customer_facing_override: string | null;
+};
+
+type PublicFeatureRow = {
+  feature_id: string;
+  feature_name: string;
+  feature_order: number;
+  section_name: string;
+  section_order: number;
+  label: string;
 };
 
 type GroupedRow = {
@@ -107,6 +106,7 @@ export default function PublicIntegrationsPage() {
     const [
       { data: featureData, error: featureError },
       { data: supportData, error: supportError },
+      { data: sectionData, error: sectionError },
     ] = await Promise.all([
       supabase
         .from("features")
@@ -114,12 +114,7 @@ export default function PublicIntegrationsPage() {
           feature_id,
           feature_name,
           display_order,
-          section_id,
-          section:sections!features_section_id_fkey(
-            section_id,
-            section_name,
-            display_order
-          )
+          section_id
         `)
         .order("display_order", { ascending: true }),
       supabase
@@ -132,6 +127,14 @@ export default function PublicIntegrationsPage() {
         `)
         .eq("integration_id", integration.integration_id)
         .eq("support_status", "supported"),
+      supabase
+        .from("sections")
+        .select(`
+          section_id,
+          section_name,
+          display_order
+        `)
+        .order("display_order", { ascending: true }),
     ]);
 
     if (featureError) {
@@ -146,11 +149,22 @@ export default function PublicIntegrationsPage() {
       return;
     }
 
-    const features = (featureData || []) as unknown as FeatureRecord[];
+    if (sectionError) {
+      setStatus(`Failed to load sections: ${sectionError.message}`);
+      setRows([]);
+      return;
+    }
+
+    const features = (featureData || []) as FeatureRecord[];
     const supportRows = (supportData || []) as SupportRecord[];
+    const sections = (sectionData || []) as SectionRecord[];
 
     const supportMap = new Map(
       supportRows.map((row) => [row.feature_id, row])
+    );
+
+    const sectionMap = new Map(
+      sections.map((section) => [section.section_id, section])
     );
 
     const mapped = features
@@ -158,16 +172,16 @@ export default function PublicIntegrationsPage() {
         const support = supportMap.get(feature.feature_id);
         if (!support) return null;
 
-        const sectionRow = Array.isArray(feature.section)
-          ? feature.section[0]
+        const section = feature.section_id
+          ? sectionMap.get(feature.section_id)
           : null;
 
         return {
           feature_id: feature.feature_id,
           feature_name: feature.feature_name,
           feature_order: feature.display_order ?? 9999,
-          section_name: sectionRow?.section_name ?? "Other",
-          section_order: sectionRow?.display_order ?? 9999,
+          section_name: section?.section_name ?? "Other",
+          section_order: section?.display_order ?? 9999,
           label: support.customer_facing_override?.trim() || feature.feature_name,
         };
       })
