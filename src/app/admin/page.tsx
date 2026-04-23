@@ -17,6 +17,7 @@ type FeatureRow = {
   feature_id: string;
   feature_name: string;
   display_order: number | null;
+  section_id: string | null;
   section:
     | {
         section_id: string;
@@ -160,56 +161,61 @@ export default function AdminPage() {
     }
   }
 
-  async function loadIntegration(integration: Integration) {
-    setSelectedIntegration(integration);
-    setDirty({});
-    setStatusMessage(`Loading ${integration.integration_name}...`);
+async function loadIntegration(integration: Integration) {
+  setSelectedIntegration(integration);
+  setDirty({});
+  setStatusMessage(`Loading ${integration.integration_name}...`);
 
-    const { data, error } = await supabase
-      .from("features")
-      .select(`
+  const { data, error } = await supabase
+    .from("features")
+    .select(`
+      feature_id,
+      feature_name,
+      display_order,
+      section_id,
+      section:sections!features_section_id_fkey(
+        section_id,
+        section_name,
+        display_order
+      ),
+      support:integration_feature_support!left(
+        integration_id,
         feature_id,
-        feature_name,
-        display_order,
-        section:sections(section_id, section_name, display_order),
-        support:integration_feature_support!left(
-          integration_id,
-          feature_id,
-          support_status,
-          customer_facing_override
-        )
-      `)
-      .order("display_order", { ascending: true });
+        support_status,
+        customer_facing_override
+      )
+    `)
+    .order("display_order", { ascending: true });
 
-    if (error) {
-      setStatusMessage(`Failed to load features: ${error.message}`);
-      setRows([]);
-      return;
-    }
-
-    const mapped: EditorRow[] = (data as unknown as FeatureRow[]).map((f) => {
-      const supportRows = Array.isArray(f.support) ? f.support : [];
-      const support = supportRows.find(
-        (x) => x.integration_id === integration.integration_id
-      );
-
-      const sectionRow = Array.isArray(f.section) ? f.section[0] : null;
-
-      return {
-        feature_id: f.feature_id,
-        feature_name: f.feature_name,
-        feature_order: f.display_order ?? 9999,
-        section_id: sectionRow?.section_id ?? "unsectioned",
-        section_name: sectionRow?.section_name ?? "Unsectioned",
-        section_order: sectionRow?.display_order ?? 9999,
-        support_status: support?.support_status ?? "not_supported",
-        customer_facing_override: support?.customer_facing_override ?? "",
-      };
-    });
-
-    setRows(mapped);
-    setStatusMessage(`Loaded ${integration.integration_name}.`);
+  if (error) {
+    setStatusMessage(`Failed to load features: ${error.message}`);
+    setRows([]);
+    return;
   }
+
+  const mapped: EditorRow[] = (data as unknown as FeatureRow[]).map((f) => {
+    const supportRows = Array.isArray(f.support) ? f.support : [];
+    const support = supportRows.find(
+      (x) => x.integration_id === integration.integration_id
+    );
+
+    const sectionRow = Array.isArray(f.section) ? f.section[0] : null;
+
+    return {
+      feature_id: f.feature_id,
+      feature_name: f.feature_name,
+      feature_order: f.display_order ?? 9999,
+      section_id: f.section_id ?? sectionRow?.section_id ?? "unsectioned",
+      section_name: sectionRow?.section_name ?? "Unsectioned",
+      section_order: sectionRow?.display_order ?? 9999,
+      support_status: support?.support_status ?? "not_supported",
+      customer_facing_override: support?.customer_facing_override ?? "",
+    };
+  });
+
+  setRows(mapped);
+  setStatusMessage(`Loaded ${integration.integration_name}.`);
+}
 
   const filteredIntegrations = useMemo(() => {
     const q = search.trim().toLowerCase();

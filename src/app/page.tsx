@@ -14,22 +14,33 @@ type Integration = {
 };
 
 type PublicFeatureRow = {
+  feature_id: string;
+  feature_name: string;
+  feature_order: number;
+  section_name: string;
+  section_order: number;
+  label: string;
+};
+
+type FeatureRecord = {
+  feature_id: string;
+  feature_name: string;
+  display_order: number | null;
+  section_id: string | null;
+  section:
+    | {
+        section_id: string;
+        section_name: string;
+        display_order: number | null;
+      }[]
+    | null;
+};
+
+type SupportRecord = {
   integration_id: string;
   feature_id: string;
   support_status: string | null;
   customer_facing_override: string | null;
-  feature:
-    | {
-        feature_name: string;
-        display_order: number | null;
-        section:
-          | {
-              section_name: string;
-              display_order: number | null;
-            }[]
-          | null;
-      }[]
-    | null;
 };
 
 type GroupedRow = {
@@ -93,32 +104,76 @@ export default function PublicIntegrationsPage() {
     setSelectedIntegration(integration);
     setStatus(`Loading ${integration.integration_name}...`);
 
-    const { data, error } = await supabase
-      .from("integration_feature_support")
-      .select(`
-        integration_id,
-        feature_id,
-        support_status,
-        customer_facing_override,
-        feature:features(
+    const [
+      { data: featureData, error: featureError },
+      { data: supportData, error: supportError },
+    ] = await Promise.all([
+      supabase
+        .from("features")
+        .select(`
+          feature_id,
           feature_name,
           display_order,
-          section:sections(
+          section_id,
+          section:sections!features_section_id_fkey(
+            section_id,
             section_name,
             display_order
           )
-        )
-      `)
-      .eq("integration_id", integration.integration_id)
-      .eq("support_status", "supported");
+        `)
+        .order("display_order", { ascending: true }),
+      supabase
+        .from("integration_feature_support")
+        .select(`
+          integration_id,
+          feature_id,
+          support_status,
+          customer_facing_override
+        `)
+        .eq("integration_id", integration.integration_id)
+        .eq("support_status", "supported"),
+    ]);
 
-    if (error) {
-      setStatus(`Failed to load feature support: ${error.message}`);
+    if (featureError) {
+      setStatus(`Failed to load features: ${featureError.message}`);
       setRows([]);
       return;
     }
 
-    setRows((data || []) as unknown as PublicFeatureRow[]);
+    if (supportError) {
+      setStatus(`Failed to load support rows: ${supportError.message}`);
+      setRows([]);
+      return;
+    }
+
+    const features = (featureData || []) as unknown as FeatureRecord[];
+    const supportRows = (supportData || []) as SupportRecord[];
+
+    const supportMap = new Map(
+      supportRows.map((row) => [row.feature_id, row])
+    );
+
+    const mapped = features
+      .map((feature) => {
+        const support = supportMap.get(feature.feature_id);
+        if (!support) return null;
+
+        const sectionRow = Array.isArray(feature.section)
+          ? feature.section[0]
+          : null;
+
+        return {
+          feature_id: feature.feature_id,
+          feature_name: feature.feature_name,
+          feature_order: feature.display_order ?? 9999,
+          section_name: sectionRow?.section_name ?? "Other",
+          section_order: sectionRow?.display_order ?? 9999,
+          label: support.customer_facing_override?.trim() || feature.feature_name,
+        };
+      })
+      .filter(Boolean) as PublicFeatureRow[];
+
+    setRows(mapped);
     setStatus(`Loaded ${integration.integration_name}.`);
   }
 
@@ -143,44 +198,25 @@ export default function PublicIntegrationsPage() {
     const map = new Map<string, GroupedRow>();
 
     const sorted = [...rows].sort((a, b) => {
-      const aFeature = Array.isArray(a.feature) ? a.feature[0] : null;
-      const bFeature = Array.isArray(b.feature) ? b.feature[0] : null;
-
-      const aSection = Array.isArray(aFeature?.section) ? aFeature?.section[0] : null;
-      const bSection = Array.isArray(bFeature?.section) ? bFeature?.section[0] : null;
-
-      const aSectionOrder = aSection?.display_order ?? 9999;
-      const bSectionOrder = bSection?.display_order ?? 9999;
-      if (aSectionOrder !== bSectionOrder) return aSectionOrder - bSectionOrder;
-
-      const aFeatureOrder = aFeature?.display_order ?? 9999;
-      const bFeatureOrder = bFeature?.display_order ?? 9999;
-      if (aFeatureOrder !== bFeatureOrder) return aFeatureOrder - bFeatureOrder;
-
-      return (aFeature?.feature_name || "").localeCompare(bFeature?.feature_name || "");
+      if (a.section_order !== b.section_order) {
+        return a.section_order - b.section_order;
+      }
+      if (a.feature_order !== b.feature_order) {
+        return a.feature_order - b.feature_order;
+      }
+      return a.feature_name.localeCompare(b.feature_name);
     });
 
     for (const row of sorted) {
-      const featureRow = Array.isArray(row.feature) ? row.feature[0] : null;
-      const sectionRow = Array.isArray(featureRow?.section) ? featureRow?.section[0] : null;
-
-      if (!featureRow) continue;
-
-      const sectionName = sectionRow?.section_name || "Other";
-      const sectionOrder = sectionRow?.display_order ?? 9999;
-      const label = row.customer_facing_override?.trim() || featureRow.feature_name || "";
-
-      if (!label) continue;
-
-      if (!map.has(sectionName)) {
-        map.set(sectionName, {
-          section_name: sectionName,
-          section_order: sectionOrder,
+      if (!map.has(row.section_name)) {
+        map.set(row.section_name, {
+          section_name: row.section_name,
+          section_order: row.section_order,
           items: [],
         });
       }
 
-      map.get(sectionName)!.items.push(label);
+      map.get(row.section_name)!.items.push(row.label);
     }
 
     return [...map.values()].sort((a, b) => a.section_order - b.section_order);
