@@ -46,8 +46,7 @@ function formatDate(value?: string | null) {
 }
 
 function categoryLabel(category?: string | null) {
-  if (!category) return "Integration";
-  return category;
+  return category || "Integration";
 }
 
 export default function PublicIntegrationsPage() {
@@ -79,11 +78,14 @@ export default function PublicIntegrationsPage() {
 
     const list = (data || []) as Integration[];
     setIntegrations(list);
-    setLoading(false);
     setStatus(`Loaded ${list.length} public integrations.`);
+    setLoading(false);
 
     if (list.length > 0) {
       loadIntegration(list[0]);
+    } else {
+      setSelectedIntegration(null);
+      setRows([]);
     }
   }
 
@@ -112,10 +114,11 @@ export default function PublicIntegrationsPage() {
 
     if (error) {
       setStatus(`Failed to load feature support: ${error.message}`);
+      setRows([]);
       return;
     }
 
-   setRows((data || []) as unknown as PublicFeatureRow[]);
+    setRows((data || []) as unknown as PublicFeatureRow[]);
     setStatus(`Loaded ${integration.integration_name}.`);
   }
 
@@ -137,50 +140,51 @@ export default function PublicIntegrationsPage() {
   }, [integrations, search]);
 
   const grouped = useMemo(() => {
-  const map = new Map<string, GroupedRow>();
+    const map = new Map<string, GroupedRow>();
 
-  const sorted = [...rows].sort((a, b) => {
-    const aFeature = Array.isArray(a.feature) ? a.feature[0] : null;
-    const bFeature = Array.isArray(b.feature) ? b.feature[0] : null;
+    const sorted = [...rows].sort((a, b) => {
+      const aFeature = Array.isArray(a.feature) ? a.feature[0] : null;
+      const bFeature = Array.isArray(b.feature) ? b.feature[0] : null;
 
-    const aSection = Array.isArray(aFeature?.section) ? aFeature?.section[0] : null;
-    const bSection = Array.isArray(bFeature?.section) ? bFeature?.section[0] : null;
+      const aSection = Array.isArray(aFeature?.section) ? aFeature?.section[0] : null;
+      const bSection = Array.isArray(bFeature?.section) ? bFeature?.section[0] : null;
 
-    const aSectionOrder = aSection?.display_order ?? 9999;
-    const bSectionOrder = bSection?.display_order ?? 9999;
-    if (aSectionOrder !== bSectionOrder) return aSectionOrder - bSectionOrder;
+      const aSectionOrder = aSection?.display_order ?? 9999;
+      const bSectionOrder = bSection?.display_order ?? 9999;
+      if (aSectionOrder !== bSectionOrder) return aSectionOrder - bSectionOrder;
 
-    const aFeatureOrder = aFeature?.display_order ?? 9999;
-    const bFeatureOrder = bFeature?.display_order ?? 9999;
-    if (aFeatureOrder !== bFeatureOrder) return aFeatureOrder - bFeatureOrder;
+      const aFeatureOrder = aFeature?.display_order ?? 9999;
+      const bFeatureOrder = bFeature?.display_order ?? 9999;
+      if (aFeatureOrder !== bFeatureOrder) return aFeatureOrder - bFeatureOrder;
 
-    return (aFeature?.feature_name || "").localeCompare(bFeature?.feature_name || "");
-  });
+      return (aFeature?.feature_name || "").localeCompare(bFeature?.feature_name || "");
+    });
 
-  for (const row of sorted) {
-    const featureRow = Array.isArray(row.feature) ? row.feature[0] : null;
-    const sectionRow = Array.isArray(featureRow?.section) ? featureRow?.section[0] : null;
+    for (const row of sorted) {
+      const featureRow = Array.isArray(row.feature) ? row.feature[0] : null;
+      const sectionRow = Array.isArray(featureRow?.section) ? featureRow?.section[0] : null;
 
-    const sectionName = sectionRow?.section_name || "Other";
-    const sectionOrder = sectionRow?.display_order ?? 9999;
-    const label =
-      row.customer_facing_override?.trim() || featureRow?.feature_name || "";
+      if (!featureRow) continue;
 
-    if (!map.has(sectionName)) {
-      map.set(sectionName, {
-        section_name: sectionName,
-        section_order: sectionOrder,
-        items: [],
-      });
-    }
+      const sectionName = sectionRow?.section_name || "Other";
+      const sectionOrder = sectionRow?.display_order ?? 9999;
+      const label = row.customer_facing_override?.trim() || featureRow.feature_name || "";
 
-    if (label) {
+      if (!label) continue;
+
+      if (!map.has(sectionName)) {
+        map.set(sectionName, {
+          section_name: sectionName,
+          section_order: sectionOrder,
+          items: [],
+        });
+      }
+
       map.get(sectionName)!.items.push(label);
     }
-  }
 
-  return [...map.values()].sort((a, b) => a.section_order - b.section_order);
-}, [rows]);
+    return [...map.values()].sort((a, b) => a.section_order - b.section_order);
+  }, [rows]);
 
   return (
     <main className="min-h-screen bg-[#0B0B1F] text-white">
@@ -189,15 +193,15 @@ export default function PublicIntegrationsPage() {
           <div className="rounded-2xl border border-white/10 bg-gradient-to-r from-[#6C63FF]/20 via-[#6C63FF]/5 to-transparent px-6 py-5">
             <div className="flex items-start justify-between gap-6">
               <div>
-                <div className="mb-3 flex items-center gap-3">
+                <div className="mb-3 flex items-center gap-4">
                   <img
-  src="/aiq-logo.svg"
-  alt="Alpine IQ"
-  className="h-11 w-auto object-contain"
-/>
+                    src="/aiq-logo.svg"
+                    alt="Alpine IQ"
+                    className="h-14 w-auto object-contain"
+                  />
                   <div>
-                    <p className="text-sm uppercase tracking-[0.18em] text-white/50">
-                      Alpine IQ
+                    <p className="text-xs uppercase tracking-[0.18em] text-white/50">
+                      ALPINE IQ
                     </p>
                     <h1 className="text-3xl font-semibold">Integrations Matrix</h1>
                   </div>
@@ -205,8 +209,8 @@ export default function PublicIntegrationsPage() {
 
                 <p className="max-w-3xl text-sm text-white/70">
                   Explore supported integration capabilities across Alpine IQ.
-                  This public view is powered by the same source of truth that updates
-                  internal documentation and Intercom automatically.
+                  This public view is powered by the same source of truth that
+                  updates internal documentation and Intercom automatically.
                 </p>
               </div>
 

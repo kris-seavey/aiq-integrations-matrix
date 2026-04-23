@@ -18,12 +18,12 @@ type FeatureRow = {
   feature_name: string;
   display_order: number | null;
   section:
-  | {
-      section_id: string;
-      section_name: string;
-      display_order: number | null;
-    }[]
-  | null;
+    | {
+        section_id: string;
+        section_name: string;
+        display_order: number | null;
+      }[]
+    | null;
   support:
     | {
         integration_id: string;
@@ -61,8 +61,7 @@ function formatDate(value?: string | null) {
 }
 
 function categoryLabel(category?: string | null) {
-  if (!category) return "Integration";
-  return category;
+  return category || "Integration";
 }
 
 export default function AdminPage() {
@@ -155,6 +154,9 @@ export default function AdminPage() {
 
     if (list.length > 0) {
       loadIntegration(list[0]);
+    } else {
+      setSelectedIntegration(null);
+      setRows([]);
     }
   }
 
@@ -181,28 +183,29 @@ export default function AdminPage() {
 
     if (error) {
       setStatusMessage(`Failed to load features: ${error.message}`);
+      setRows([]);
       return;
     }
 
-const mapped: EditorRow[] = (data as unknown as FeatureRow[]).map((f) => {
-  const supportRows = Array.isArray(f.support) ? f.support : [];
-  const support = supportRows.find(
-    (x) => x.integration_id === integration.integration_id
-  );
+    const mapped: EditorRow[] = (data as unknown as FeatureRow[]).map((f) => {
+      const supportRows = Array.isArray(f.support) ? f.support : [];
+      const support = supportRows.find(
+        (x) => x.integration_id === integration.integration_id
+      );
 
-  const sectionRow = Array.isArray(f.section) ? f.section[0] : null;
+      const sectionRow = Array.isArray(f.section) ? f.section[0] : null;
 
-  return {
-    feature_id: f.feature_id,
-    feature_name: f.feature_name,
-    feature_order: f.display_order ?? 9999,
-    section_id: sectionRow?.section_id ?? "unsectioned",
-    section_name: sectionRow?.section_name ?? "Unsectioned",
-    section_order: sectionRow?.display_order ?? 9999,
-    support_status: support?.support_status ?? "not_supported",
-    customer_facing_override: support?.customer_facing_override ?? "",
-  };
-});
+      return {
+        feature_id: f.feature_id,
+        feature_name: f.feature_name,
+        feature_order: f.display_order ?? 9999,
+        section_id: sectionRow?.section_id ?? "unsectioned",
+        section_name: sectionRow?.section_name ?? "Unsectioned",
+        section_order: sectionRow?.display_order ?? 9999,
+        support_status: support?.support_status ?? "not_supported",
+        customer_facing_override: support?.customer_facing_override ?? "",
+      };
+    });
 
     setRows(mapped);
     setStatusMessage(`Loaded ${integration.integration_name}.`);
@@ -348,15 +351,15 @@ const mapped: EditorRow[] = (data as unknown as FeatureRow[]).map((f) => {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[#0B0B1F] px-6 py-10 text-white">
         <div className="w-full max-w-md rounded-3xl border border-white/10 bg-white/5 p-8 shadow-2xl backdrop-blur">
-          <div className="mb-6 flex items-center gap-3">
-           <img
-  src="/aiq-logo.svg"
-  alt="Alpine IQ"
-  className="h-11 w-auto object-contain"
-/>
+          <div className="mb-6 flex items-center gap-4">
+            <img
+              src="/aiq-logo.svg"
+              alt="Alpine IQ"
+              className="h-14 w-auto object-contain"
+            />
             <div>
               <p className="text-xs uppercase tracking-[0.18em] text-white/50">
-                Alpine IQ
+                ALPINE IQ
               </p>
               <h1 className="text-3xl font-semibold">Admin Login</h1>
             </div>
@@ -404,15 +407,15 @@ const mapped: EditorRow[] = (data as unknown as FeatureRow[]).map((f) => {
           <div className="rounded-2xl border border-white/10 bg-gradient-to-r from-[#6C63FF]/20 via-[#6C63FF]/5 to-transparent px-6 py-5">
             <div className="flex items-start justify-between gap-6">
               <div>
-                <div className="mb-3 flex items-center gap-3">
-                 <img
-  src="/aiq-logo.svg"
-  alt="Alpine IQ"
-  className="h-11 w-auto object-contain"
-/>
+                <div className="mb-3 flex items-center gap-4">
+                  <img
+                    src="/aiq-logo.svg"
+                    alt="Alpine IQ"
+                    className="h-14 w-auto object-contain"
+                  />
                   <div>
                     <p className="text-xs uppercase tracking-[0.18em] text-white/50">
-                      Alpine IQ
+                      ALPINE IQ
                     </p>
                     <h1 className="text-3xl font-semibold">Integrations Matrix Admin</h1>
                   </div>
