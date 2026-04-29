@@ -99,20 +99,61 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
   );
 }
 
+function CheckboxIndicator({
+  checked,
+  disabled,
+}: {
+  checked: boolean;
+  disabled: boolean;
+}) {
+  let cls =
+    "flex h-5 w-5 shrink-0 items-center justify-center rounded border ";
+  if (disabled) {
+    cls += "border-[#D7DCE5] bg-[#F4F6FA]";
+  } else if (checked) {
+    cls += "border-[#6262F5] bg-[#6262F5]";
+  } else {
+    cls += "border-[#C9D2E3] bg-white";
+  }
+  return (
+    <span className={cls} aria-hidden="true">
+      {checked && (
+        <svg
+          viewBox="0 0 16 16"
+          className="h-3.5 w-3.5 text-white"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M3 8.5l3.5 3.5L13 5" />
+        </svg>
+      )}
+    </span>
+  );
+}
+
 export default function PublicIntegrationsPage() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
-  const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
+  const [selectedIntegration, setSelectedIntegration] =
+    useState<Integration | null>(null);
 
   const [allFeatures, setAllFeatures] = useState<FeatureRecord[]>([]);
   const [allSections, setAllSections] = useState<SectionRecord[]>([]);
 
   const [rows, setRows] = useState<DisplayFeatureRow[]>([]);
-  const [comparisonRows, setComparisonRows] = useState<ComparisonFeatureRow[]>([]);
+  const [comparisonRows, setComparisonRows] = useState<ComparisonFeatureRow[]>(
+    []
+  );
 
+  const [compareMode, setCompareMode] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [viewAllFeatures, setViewAllFeatures] = useState(false);
 
-  const [expandedFeatures, setExpandedFeatures] = useState<Set<string>>(new Set());
+  const [expandedFeatures, setExpandedFeatures] = useState<Set<string>>(
+    new Set()
+  );
 
   const [status, setStatus] = useState("Loading public integrations...");
   const [loading, setLoading] = useState(true);
@@ -125,21 +166,19 @@ export default function PublicIntegrationsPage() {
   }, []);
 
   useEffect(() => {
-    if (compareIds.length === 2) {
+    if (compareMode && compareIds.length === 2) {
       loadComparison(compareIds);
     } else {
       setComparisonRows([]);
     }
-  }, [compareIds, allFeatures, allSections]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [compareIds, compareMode, allFeatures, allSections]);
 
   function toggleExpanded(featureId: string) {
     setExpandedFeatures((prev) => {
       const next = new Set(prev);
-      if (next.has(featureId)) {
-        next.delete(featureId);
-      } else {
-        next.add(featureId);
-      }
+      if (next.has(featureId)) next.delete(featureId);
+      else next.add(featureId);
       return next;
     });
   }
@@ -155,7 +194,9 @@ export default function PublicIntegrationsPage() {
     ] = await Promise.all([
       supabase
         .from("integrations")
-        .select("integration_id, integration_name, category, status, public_visibility, updated_at")
+        .select(
+          "integration_id, integration_name, category, status, public_visibility, updated_at"
+        )
         .eq("public_visibility", true)
         .order("integration_name"),
       supabase
@@ -173,13 +214,11 @@ export default function PublicIntegrationsPage() {
       setLoading(false);
       return;
     }
-
     if (featureError) {
       setStatus(`Failed to load features: ${featureError.message}`);
       setLoading(false);
       return;
     }
-
     if (sectionError) {
       setStatus(`Failed to load sections: ${sectionError.message}`);
       setLoading(false);
@@ -204,7 +243,9 @@ export default function PublicIntegrationsPage() {
 
     const { data: supportData, error: supportError } = await supabase
       .from("integration_feature_support")
-      .select("integration_id, feature_id, support_status, customer_facing_override")
+      .select(
+        "integration_id, feature_id, support_status, customer_facing_override"
+      )
       .eq("integration_id", integration.integration_id);
 
     if (supportError) {
@@ -216,11 +257,15 @@ export default function PublicIntegrationsPage() {
 
     const supportRows = (supportData || []) as SupportRecord[];
     const supportMap = new Map(supportRows.map((row) => [row.feature_id, row]));
-    const sectionMap = new Map(allSections.map((section) => [section.section_id, section]));
+    const sectionMap = new Map(
+      allSections.map((section) => [section.section_id, section])
+    );
 
     const mapped: DisplayFeatureRow[] = allFeatures.map((feature) => {
       const support = supportMap.get(feature.feature_id);
-      const section = feature.section_id ? sectionMap.get(feature.section_id) : null;
+      const section = feature.section_id
+        ? sectionMap.get(feature.section_id)
+        : null;
 
       return {
         feature_id: feature.feature_id,
@@ -257,7 +302,9 @@ export default function PublicIntegrationsPage() {
     }
 
     const supportRows = (data || []) as SupportRecord[];
-    const sectionMap = new Map(allSections.map((section) => [section.section_id, section]));
+    const sectionMap = new Map(
+      allSections.map((section) => [section.section_id, section])
+    );
 
     const supportMap = new Map<string, SupportRecord>();
     for (const row of supportRows) {
@@ -265,7 +312,9 @@ export default function PublicIntegrationsPage() {
     }
 
     const mapped: ComparisonFeatureRow[] = allFeatures.map((feature) => {
-      const section = feature.section_id ? sectionMap.get(feature.section_id) : null;
+      const section = feature.section_id
+        ? sectionMap.get(feature.section_id)
+        : null;
 
       return {
         feature_id: feature.feature_id,
@@ -295,25 +344,37 @@ export default function PublicIntegrationsPage() {
     setStatus(`Loaded ${integrations.length} public integrations.`);
   }
 
+  function enterCompareMode() {
+    setCompareMode(true);
+    setSelectedIntegration(null);
+    setRows([]);
+    setViewAllFeatures(false);
+    setCompareIds([]);
+    setStatus("Comparison mode — choose two integrations.");
+  }
+
+  function exitCompareMode() {
+    setCompareMode(false);
+    setCompareIds([]);
+    setComparisonRows([]);
+    setStatus(`Loaded ${integrations.length} public integrations.`);
+  }
+
   function toggleCompare(id: string) {
     setCompareIds((prev) => {
       if (prev.includes(id)) {
         return prev.filter((existingId) => existingId !== id);
       }
-
-      if (prev.length >= 2) {
-        return prev;
-      }
-
+      if (prev.length >= 2) return prev;
       return [...prev, id];
     });
   }
 
-  const isComparisonMode = compareIds.length === 2;
+  const isComparisonMode = compareMode && compareIds.length === 2;
 
   const compareIntegrations = useMemo(() => {
     return compareIds
-      .map((id) => integrations.find((integration) => integration.integration_id === id))
+      .map((id) => integrations.find((i) => i.integration_id === id))
       .filter(Boolean) as Integration[];
   }, [compareIds, integrations]);
 
@@ -329,16 +390,19 @@ export default function PublicIntegrationsPage() {
       ]
         .join(" ")
         .toLowerCase();
-
       return haystack.includes(q);
     });
   }, [integrations, search]);
 
   const overviewRows = useMemo(() => {
-    const sectionMap = new Map(allSections.map((section) => [section.section_id, section]));
+    const sectionMap = new Map(
+      allSections.map((section) => [section.section_id, section])
+    );
 
     return allFeatures.map((feature) => {
-      const section = feature.section_id ? sectionMap.get(feature.section_id) : null;
+      const section = feature.section_id
+        ? sectionMap.get(feature.section_id)
+        : null;
 
       return {
         feature_id: feature.feature_id,
@@ -363,13 +427,13 @@ export default function PublicIntegrationsPage() {
 
   const grouped = useMemo(() => {
     const map = new Map<string, GroupedRow>();
-
     const sorted = [...visibleRows].sort((a, b) => {
-      if (a.section_order !== b.section_order) return a.section_order - b.section_order;
-      if (a.feature_order !== b.feature_order) return a.feature_order - b.feature_order;
+      if (a.section_order !== b.section_order)
+        return a.section_order - b.section_order;
+      if (a.feature_order !== b.feature_order)
+        return a.feature_order - b.feature_order;
       return a.feature_name.localeCompare(b.feature_name);
     });
-
     for (const row of sorted) {
       if (!map.has(row.section_name)) {
         map.set(row.section_name, {
@@ -378,22 +442,20 @@ export default function PublicIntegrationsPage() {
           items: [],
         });
       }
-
       map.get(row.section_name)!.items.push(row);
     }
-
     return [...map.values()].sort((a, b) => a.section_order - b.section_order);
   }, [visibleRows]);
 
   const comparisonGrouped = useMemo(() => {
     const map = new Map<string, ComparisonGroupedRow>();
-
     const sorted = [...comparisonRows].sort((a, b) => {
-      if (a.section_order !== b.section_order) return a.section_order - b.section_order;
-      if (a.feature_order !== b.feature_order) return a.feature_order - b.feature_order;
+      if (a.section_order !== b.section_order)
+        return a.section_order - b.section_order;
+      if (a.feature_order !== b.feature_order)
+        return a.feature_order - b.feature_order;
       return a.feature_name.localeCompare(b.feature_name);
     });
-
     for (const row of sorted) {
       if (!map.has(row.section_name)) {
         map.set(row.section_name, {
@@ -402,24 +464,23 @@ export default function PublicIntegrationsPage() {
           items: [],
         });
       }
-
       map.get(row.section_name)!.items.push(row);
     }
-
     return [...map.values()].sort((a, b) => a.section_order - b.section_order);
   }, [comparisonRows]);
 
-  const supportedCount = useMemo(() => {
-    return rows.filter((row) => row.status === "supported").length;
-  }, [rows]);
-
-  const plannedCount = useMemo(() => {
-    return rows.filter((row) => row.status === "planned").length;
-  }, [rows]);
-
-  const unsupportedCount = useMemo(() => {
-    return rows.filter((row) => row.status === "not_supported").length;
-  }, [rows]);
+  const supportedCount = useMemo(
+    () => rows.filter((r) => r.status === "supported").length,
+    [rows]
+  );
+  const plannedCount = useMemo(
+    () => rows.filter((r) => r.status === "planned").length,
+    [rows]
+  );
+  const unsupportedCount = useMemo(
+    () => rows.filter((r) => r.status === "not_supported").length,
+    [rows]
+  );
 
   return (
     <main className="min-h-screen bg-[#6262F5]">
@@ -427,21 +488,24 @@ export default function PublicIntegrationsPage() {
         <div className="mx-auto max-w-7xl px-6 py-6">
           <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-start gap-4">
-              <img src="/aiq-logo.svg" alt="AIQ" className="h-10 w-auto object-contain" />
-
+              <img
+                src="/aiq-logo.svg"
+                alt="AIQ"
+                className="h-10 w-auto object-contain"
+              />
               <div className="min-w-0">
                 <h1 className="mt-1 text-[30px] font-bold leading-tight text-[#080808]">
                   Integrations Matrix
                 </h1>
                 <p className="mt-2 max-w-3xl text-[16px] leading-6 text-[#626875]">
-                  Browse public integrations, review feature sections, and compare
-                  support across two integrations.
+                  Browse public integrations, review feature sections, and
+                  compare support across two integrations.
                 </p>
               </div>
             </div>
 
             <div className="flex shrink-0 items-center gap-3">
-              {selectedIntegration && !isComparisonMode && (
+              {selectedIntegration && !compareMode && (
                 <button
                   type="button"
                   onClick={clearSelection}
@@ -481,6 +545,27 @@ export default function PublicIntegrationsPage() {
               />
             </div>
 
+            {/* Compare mode toggle button */}
+            <div className="mt-4">
+              {compareMode ? (
+                <button
+                  type="button"
+                  onClick={exitCompareMode}
+                  className="w-full rounded-full border border-[#6262F5] bg-[#EDF0FF] px-4 py-2.5 text-[13px] font-semibold text-[#6262F5] transition hover:bg-[#DCE3FF]"
+                >
+                  Exit compare mode
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={enterCompareMode}
+                  className="w-full rounded-full bg-[#6262F5] px-4 py-2.5 text-[13px] font-semibold text-white transition hover:bg-[#5555E8]"
+                >
+                  Compare integrations
+                </button>
+              )}
+            </div>
+
             <div className="mt-6 flex items-center justify-between border-t border-[#E2E6ED] pt-5">
               <h2 className="text-[12px] font-bold uppercase tracking-[0.12em] text-[#626875]">
                 Integrations
@@ -491,55 +576,68 @@ export default function PublicIntegrationsPage() {
             </div>
 
             <p className="mt-2 text-[12px] leading-5 text-[#626875]">
-              Click an integration to view details. Check exactly two to compare.
+              {compareMode
+                ? `Check exactly two integrations to compare them. ${compareIds.length}/2 selected.`
+                : "Click an integration to view details."}
             </p>
 
             <div className="mt-3 space-y-2">
               {filteredIntegrations.map((integration) => {
+                const isChecked = compareIds.includes(
+                  integration.integration_id
+                );
+                const isCompareDisabled =
+                  compareMode && !isChecked && compareIds.length >= 2;
                 const isSelected =
-                  selectedIntegration?.integration_id === integration.integration_id;
-                const isChecked = compareIds.includes(integration.integration_id);
-                const isCompareDisabled = !isChecked && compareIds.length >= 2;
+                  !compareMode &&
+                  selectedIntegration?.integration_id ===
+                    integration.integration_id;
 
                 return (
-                  <div
+                  <button
                     key={integration.integration_id}
-                    className={`rounded-xl border transition ${
-                      isSelected && !isComparisonMode
+                    type="button"
+                    onClick={() => {
+                      if (compareMode) {
+                        if (!isCompareDisabled) {
+                          toggleCompare(integration.integration_id);
+                        }
+                      } else {
+                        loadIntegration(integration);
+                      }
+                    }}
+                    disabled={isCompareDisabled}
+                    className={`block w-full rounded-xl border text-left transition ${
+                      isSelected
                         ? "border-[#6262F5] bg-[#6262F5] text-white"
+                        : isChecked
+                        ? "border-[#6262F5] bg-[#EDF0FF] text-[#080808]"
+                        : isCompareDisabled
+                        ? "cursor-not-allowed border-[#E2E6ED] bg-[#FAFBFC] text-[#A2A6AE] opacity-60"
                         : "border-[#E2E6ED] bg-white text-[#080808] hover:border-[#C9D2E3] hover:bg-[#F4F6FA]"
                     }`}
                   >
                     <div className="flex items-start gap-3 px-4 py-3">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        disabled={isCompareDisabled}
-                        onChange={() => toggleCompare(integration.integration_id)}
-                        className="mt-1 h-4 w-4 rounded border-[#C9D2E3] accent-[#6262F5]"
-                        aria-label={`Compare ${integration.integration_name}`}
-                      />
-
-                      <button
-                        type="button"
-                        onClick={() => loadIntegration(integration)}
-                        className="min-w-0 flex-1 text-left"
-                      >
+                      {compareMode && (
+                        <CheckboxIndicator
+                          checked={isChecked}
+                          disabled={isCompareDisabled}
+                        />
+                      )}
+                      <div className="min-w-0 flex-1">
                         <div className="text-[16px] font-semibold leading-5">
                           {integration.integration_name}
                         </div>
                         <div
                           className={`mt-1 text-[13px] ${
-                            isSelected && !isComparisonMode
-                              ? "text-white/90"
-                              : "text-[#626875]"
+                            isSelected ? "text-white/90" : "text-[#626875]"
                           }`}
                         >
                           {categoryLabel(integration.category)}
                         </div>
-                      </button>
+                      </div>
                     </div>
-                  </div>
+                  </button>
                 );
               })}
 
@@ -550,13 +648,13 @@ export default function PublicIntegrationsPage() {
               )}
             </div>
 
-            {compareIds.length > 0 && (
+            {compareMode && compareIds.length > 0 && (
               <button
                 type="button"
                 onClick={() => setCompareIds([])}
                 className="mt-4 w-full rounded-full border border-[#D7DCE5] bg-white px-4 py-2 text-[13px] font-semibold text-[#626875] transition hover:bg-[#F4F6FA]"
               >
-                Clear comparison
+                Clear comparison selection
               </button>
             )}
           </aside>
@@ -598,7 +696,10 @@ export default function PublicIntegrationsPage() {
                     </div>
                   ) : (
                     comparisonGrouped.map((group) => (
-                      <section key={group.section_name} className="space-y-4">
+                      <section
+                        key={group.section_name}
+                        className="space-y-4"
+                      >
                         <div className="border-b border-[#E2E6ED] pb-3">
                           <h3 className="text-[24px] font-bold leading-tight text-[#080808]">
                             {group.section_name}
@@ -620,7 +721,9 @@ export default function PublicIntegrationsPage() {
 
                           {group.items.map((item) => {
                             const hasDescription = !!item.description?.trim();
-                            const isExpanded = expandedFeatures.has(item.feature_id);
+                            const isExpanded = expandedFeatures.has(
+                              item.feature_id
+                            );
                             const descriptionId = `comparison-desc-${item.feature_id}`;
 
                             return (
@@ -633,7 +736,9 @@ export default function PublicIntegrationsPage() {
                                     {hasDescription ? (
                                       <button
                                         type="button"
-                                        onClick={() => toggleExpanded(item.feature_id)}
+                                        onClick={() =>
+                                          toggleExpanded(item.feature_id)
+                                        }
                                         aria-expanded={isExpanded}
                                         aria-controls={descriptionId}
                                         className="flex h-full w-full items-center justify-between gap-3 px-4 py-3 text-left font-medium text-[#080808] transition hover:bg-[#FAFBFC]"
@@ -663,7 +768,6 @@ export default function PublicIntegrationsPage() {
                                       ? "Planned"
                                       : "Not Supported"}
                                   </div>
-
                                   <div
                                     className={`px-4 py-3 font-medium ${
                                       item.secondStatus === "supported"
@@ -696,6 +800,37 @@ export default function PublicIntegrationsPage() {
                       </section>
                     ))
                   )}
+                </div>
+              </>
+            ) : compareMode ? (
+              <>
+                <div className="border-b border-[#E2E6ED] pb-6">
+                  <p className="text-[12px] font-bold uppercase tracking-[0.12em] text-[#626875]">
+                    Comparison mode
+                  </p>
+                  <h2 className="mt-2 text-[30px] font-bold leading-tight text-[#080808]">
+                    Choose two integrations to compare
+                  </h2>
+                  <p className="mt-3 max-w-3xl text-[16px] leading-6 text-[#626875]">
+                    Pick exactly two integrations from the sidebar.
+                    {compareIds.length === 1 && (
+                      <>
+                        {" "}
+                        <span className="font-semibold text-[#080808]">
+                          {compareIntegrations[0]?.integration_name}
+                        </span>{" "}
+                        is selected — pick one more to begin.
+                      </>
+                    )}
+                  </p>
+                </div>
+
+                <div className="mt-8 rounded-xl border border-dashed border-[#D7DCE5] bg-[#FAFBFC] px-5 py-8 text-[16px] text-[#626875]">
+                  {compareIds.length === 0
+                    ? "No integrations selected yet."
+                    : compareIds.length === 1
+                    ? "1 selected. Choose one more."
+                    : "Loading..."}
                 </div>
               </>
             ) : selectedIntegration ? (
@@ -791,10 +926,11 @@ export default function PublicIntegrationsPage() {
                     All feature sections
                   </h2>
                   <p className="mt-3 max-w-3xl text-[16px] leading-6 text-[#626875]">
-                    Use this as a reference key for all available features in the
-                    matrix. Click a feature to see its description, select an integration
-                    from the left to view supported features, or check exactly two
-                    integrations to compare them.
+                    Use this as a reference key for all available features in
+                    the matrix. Click a feature to see its description, click
+                    an integration in the sidebar to view its supported
+                    features, or press <strong>Compare integrations</strong> to
+                    line up two side-by-side.
                   </p>
                 </div>
 
