@@ -18,6 +18,7 @@ type FeatureRecord = {
   feature_name: string;
   display_order: number | null;
   section_id: string | null;
+  description: string | null;
 };
 
 type SectionRecord = {
@@ -37,6 +38,7 @@ type DisplayFeatureRow = {
   feature_id: string;
   feature_name: string;
   label: string;
+  description: string | null;
   feature_order: number;
   section_name: string;
   section_order: number;
@@ -46,6 +48,7 @@ type DisplayFeatureRow = {
 type ComparisonFeatureRow = {
   feature_id: string;
   feature_name: string;
+  description: string | null;
   feature_order: number;
   section_name: string;
   section_order: number;
@@ -69,6 +72,25 @@ function categoryLabel(category?: string | null) {
   return category || "Integration";
 }
 
+function ChevronIcon({ expanded }: { expanded: boolean }) {
+  return (
+    <svg
+      className={`h-4 w-4 shrink-0 text-[#6262F5] transition-transform duration-200 ${
+        expanded ? "rotate-90" : ""
+      }`}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M9 5l7 7-7 7" />
+    </svg>
+  );
+}
+
 export default function PublicIntegrationsPage() {
   const [integrations, setIntegrations] = useState<Integration[]>([]);
   const [selectedIntegration, setSelectedIntegration] = useState<Integration | null>(null);
@@ -81,6 +103,8 @@ export default function PublicIntegrationsPage() {
 
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [viewAllFeatures, setViewAllFeatures] = useState(false);
+
+  const [expandedFeatures, setExpandedFeatures] = useState<Set<string>>(new Set());
 
   const [status, setStatus] = useState("Loading public integrations...");
   const [loading, setLoading] = useState(true);
@@ -100,6 +124,18 @@ export default function PublicIntegrationsPage() {
     }
   }, [compareIds, allFeatures, allSections]);
 
+  function toggleExpanded(featureId: string) {
+    setExpandedFeatures((prev) => {
+      const next = new Set(prev);
+      if (next.has(featureId)) {
+        next.delete(featureId);
+      } else {
+        next.add(featureId);
+      }
+      return next;
+    });
+  }
+
   async function loadInitialData() {
     setLoading(true);
     setStatus("Loading public integrations...");
@@ -116,7 +152,7 @@ export default function PublicIntegrationsPage() {
         .order("integration_name"),
       supabase
         .from("features")
-        .select("feature_id, feature_name, display_order, section_id")
+        .select("feature_id, feature_name, display_order, section_id, description")
         .order("display_order", { ascending: true }),
       supabase
         .from("sections")
@@ -182,6 +218,7 @@ export default function PublicIntegrationsPage() {
         feature_id: feature.feature_id,
         feature_name: feature.feature_name,
         label: support?.customer_facing_override?.trim() || feature.feature_name,
+        description: feature.description,
         feature_order: feature.display_order ?? 9999,
         section_name: section?.section_name ?? "Other",
         section_order: section?.display_order ?? 9999,
@@ -225,6 +262,7 @@ export default function PublicIntegrationsPage() {
       return {
         feature_id: feature.feature_id,
         feature_name: feature.feature_name,
+        description: feature.description,
         feature_order: feature.display_order ?? 9999,
         section_name: section?.section_name ?? "Other",
         section_order: section?.display_order ?? 9999,
@@ -296,6 +334,7 @@ export default function PublicIntegrationsPage() {
         feature_id: feature.feature_id,
         feature_name: feature.feature_name,
         label: feature.feature_name,
+        description: feature.description,
         feature_order: feature.display_order ?? 9999,
         section_name: section?.section_name ?? "Other",
         section_order: section?.display_order ?? 9999,
@@ -531,6 +570,9 @@ export default function PublicIntegrationsPage() {
                     </span>
                     .
                   </p>
+                  <p className="mt-3 text-[13px] text-[#626875]">
+                    Click a feature name to see its description.
+                  </p>
                 </div>
 
                 <div className="mt-8 space-y-8">
@@ -560,36 +602,68 @@ export default function PublicIntegrationsPage() {
                             </div>
                           </div>
 
-                          {group.items.map((item) => (
-                            <div
-                              key={item.feature_id}
-                              className="grid grid-cols-[1.4fr_1fr_1fr] border-t border-[#E2E6ED] text-[15px]"
-                            >
-                              <div className="border-r border-[#E2E6ED] px-4 py-3 font-medium text-[#080808]">
-                                {item.feature_name}
-                              </div>
+                          {group.items.map((item) => {
+                            const hasDescription = !!item.description?.trim();
+                            const isExpanded = expandedFeatures.has(item.feature_id);
+                            const descriptionId = `comparison-desc-${item.feature_id}`;
 
+                            return (
                               <div
-                                className={`border-r border-[#E2E6ED] px-4 py-3 font-medium ${
-                                  item.firstSupported
-                                    ? "text-[#080808]"
-                                    : "text-[#7F8794]"
-                                }`}
+                                key={item.feature_id}
+                                className="border-t border-[#E2E6ED]"
                               >
-                                {item.firstSupported ? "Supported" : "Not Supported"}
-                              </div>
+                                <div className="grid grid-cols-[1.4fr_1fr_1fr] text-[15px]">
+                                  <div className="border-r border-[#E2E6ED]">
+                                    {hasDescription ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => toggleExpanded(item.feature_id)}
+                                        aria-expanded={isExpanded}
+                                        aria-controls={descriptionId}
+                                        className="flex h-full w-full items-center justify-between gap-3 px-4 py-3 text-left font-medium text-[#080808] transition hover:bg-[#FAFBFC]"
+                                      >
+                                        <span>{item.feature_name}</span>
+                                        <ChevronIcon expanded={isExpanded} />
+                                      </button>
+                                    ) : (
+                                      <div className="px-4 py-3 font-medium text-[#080808]">
+                                        {item.feature_name}
+                                      </div>
+                                    )}
+                                  </div>
 
-                              <div
-                                className={`px-4 py-3 font-medium ${
-                                  item.secondSupported
-                                    ? "text-[#080808]"
-                                    : "text-[#7F8794]"
-                                }`}
-                              >
-                                {item.secondSupported ? "Supported" : "Not Supported"}
+                                  <div
+                                    className={`border-r border-[#E2E6ED] px-4 py-3 font-medium ${
+                                      item.firstSupported
+                                        ? "text-[#080808]"
+                                        : "text-[#7F8794]"
+                                    }`}
+                                  >
+                                    {item.firstSupported ? "Supported" : "Not Supported"}
+                                  </div>
+
+                                  <div
+                                    className={`px-4 py-3 font-medium ${
+                                      item.secondSupported
+                                        ? "text-[#080808]"
+                                        : "text-[#7F8794]"
+                                    }`}
+                                  >
+                                    {item.secondSupported ? "Supported" : "Not Supported"}
+                                  </div>
+                                </div>
+
+                                {hasDescription && isExpanded && (
+                                  <div
+                                    id={descriptionId}
+                                    className="border-t border-[#E2E6ED] bg-[#FAFBFC] px-4 py-3 text-[14px] leading-6 text-[#626875]"
+                                  >
+                                    {item.description}
+                                  </div>
+                                )}
                               </div>
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </section>
                     ))
@@ -657,6 +731,10 @@ export default function PublicIntegrationsPage() {
                         </button>
                       </label>
                     </div>
+
+                    <p className="text-[13px] text-[#626875]">
+                      Click a feature to see its description.
+                    </p>
                   </div>
                 </div>
 
@@ -665,6 +743,8 @@ export default function PublicIntegrationsPage() {
                   loadingIntegration={loadingIntegration}
                   viewAllFeatures={viewAllFeatures}
                   emptyMessage="No supported features available to display."
+                  expandedFeatures={expandedFeatures}
+                  onToggleExpand={toggleExpanded}
                 />
               </>
             ) : (
@@ -678,8 +758,9 @@ export default function PublicIntegrationsPage() {
                   </h2>
                   <p className="mt-3 max-w-3xl text-[16px] leading-6 text-[#626875]">
                     Use this as a reference key for all available features in the
-                    matrix. Select an integration from the left to view supported
-                    features, or check exactly two integrations to compare them.
+                    matrix. Click a feature to see its description, select an integration
+                    from the left to view supported features, or check exactly two
+                    integrations to compare them.
                   </p>
                 </div>
 
@@ -688,6 +769,8 @@ export default function PublicIntegrationsPage() {
                   loadingIntegration={false}
                   viewAllFeatures={false}
                   emptyMessage="No features available to display."
+                  expandedFeatures={expandedFeatures}
+                  onToggleExpand={toggleExpanded}
                 />
               </>
             )}
@@ -703,11 +786,15 @@ function FeatureList({
   loadingIntegration,
   viewAllFeatures,
   emptyMessage,
+  expandedFeatures,
+  onToggleExpand,
 }: {
   grouped: GroupedRow[];
   loadingIntegration: boolean;
   viewAllFeatures: boolean;
   emptyMessage: string;
+  expandedFeatures: Set<string>;
+  onToggleExpand: (featureId: string) => void;
 }) {
   return (
     <div className="mt-8 space-y-8">
@@ -728,24 +815,62 @@ function FeatureList({
               </span>
             </div>
 
-            <ul className="space-y-2 pl-5">
-              {group.items.map((item) => (
-                <li
-                  key={item.feature_id}
-                  className={`text-[16px] leading-6 ${
-                    item.isSupported
-                      ? "text-[#080808] marker:text-[#6262F5]"
-                      : "text-[#7F8794] marker:text-[#C0C7D4]"
-                  }`}
-                >
-                  <span>{item.label}</span>
-                  {!item.isSupported && (
-                    <span className="ml-2 rounded-full bg-[#F4F6FA] px-2 py-0.5 text-[12px] font-medium text-[#7F8794]">
-                      Not supported
-                    </span>
-                  )}
-                </li>
-              ))}
+            <ul className="overflow-hidden rounded-xl border border-[#E2E6ED] bg-white">
+              {group.items.map((item, idx) => {
+                const hasDescription = !!item.description?.trim();
+                const isExpanded = expandedFeatures.has(item.feature_id);
+                const descriptionId = `feature-desc-${item.feature_id}`;
+                const borderTop = idx === 0 ? "" : "border-t border-[#E2E6ED]";
+                const labelClass = item.isSupported
+                  ? "text-[#080808]"
+                  : "text-[#7F8794]";
+
+                return (
+                  <li key={item.feature_id} className={borderTop}>
+                    {hasDescription ? (
+                      <button
+                        type="button"
+                        onClick={() => onToggleExpand(item.feature_id)}
+                        aria-expanded={isExpanded}
+                        aria-controls={descriptionId}
+                        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left transition hover:bg-[#FAFBFC]"
+                      >
+                        <span className="flex flex-wrap items-center gap-2">
+                          <span className={`text-[16px] leading-6 ${labelClass}`}>
+                            {item.label}
+                          </span>
+                          {!item.isSupported && (
+                            <span className="rounded-full bg-[#F4F6FA] px-2 py-0.5 text-[12px] font-medium text-[#7F8794]">
+                              Not supported
+                            </span>
+                          )}
+                        </span>
+                        <ChevronIcon expanded={isExpanded} />
+                      </button>
+                    ) : (
+                      <div className="flex items-center gap-3 px-4 py-3">
+                        <span className={`text-[16px] leading-6 ${labelClass}`}>
+                          {item.label}
+                        </span>
+                        {!item.isSupported && (
+                          <span className="rounded-full bg-[#F4F6FA] px-2 py-0.5 text-[12px] font-medium text-[#7F8794]">
+                            Not supported
+                          </span>
+                        )}
+                      </div>
+                    )}
+
+                    {hasDescription && isExpanded && (
+                      <div
+                        id={descriptionId}
+                        className="border-t border-[#E2E6ED] bg-[#FAFBFC] px-4 py-3 text-[14px] leading-6 text-[#626875]"
+                      >
+                        {item.description}
+                      </div>
+                    )}
+                  </li>
+                );
+              })}
             </ul>
           </section>
         ))
