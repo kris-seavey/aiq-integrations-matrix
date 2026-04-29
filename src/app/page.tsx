@@ -60,9 +60,10 @@ type ComparisonFeatureRow = {
   feature_order: number;
   section_name: string;
   section_order: number;
-  firstStatus: FeatureStatus;
-  secondStatus: FeatureStatus;
+  statuses: FeatureStatus[];
 };
+
+const MAX_COMPARE = 3;
 
 type GroupedRow = {
   section_name: string;
@@ -166,7 +167,7 @@ export default function PublicIntegrationsPage() {
   }, []);
 
   useEffect(() => {
-    if (compareMode && compareIds.length === 2) {
+    if (compareMode && compareIds.length >= 2) {
       loadComparison(compareIds);
     } else {
       setComparisonRows([]);
@@ -285,7 +286,7 @@ export default function PublicIntegrationsPage() {
   }
 
   async function loadComparison(ids: string[]) {
-    if (ids.length !== 2 || allFeatures.length === 0) return;
+    if (ids.length < 2 || ids.length > MAX_COMPARE || allFeatures.length === 0) return;
 
     setLoadingComparison(true);
 
@@ -323,11 +324,10 @@ export default function PublicIntegrationsPage() {
         feature_order: feature.display_order ?? 9999,
         section_name: section?.section_name ?? "Other",
         section_order: section?.display_order ?? 9999,
-        firstStatus: toFeatureStatus(
-          supportMap.get(`${ids[0]}:${feature.feature_id}`)?.support_status
-        ),
-        secondStatus: toFeatureStatus(
-          supportMap.get(`${ids[1]}:${feature.feature_id}`)?.support_status
+        statuses: ids.map((id) =>
+          toFeatureStatus(
+            supportMap.get(`${id}:${feature.feature_id}`)?.support_status
+          )
         ),
       };
     });
@@ -365,12 +365,12 @@ export default function PublicIntegrationsPage() {
       if (prev.includes(id)) {
         return prev.filter((existingId) => existingId !== id);
       }
-      if (prev.length >= 2) return prev;
+      if (prev.length >= MAX_COMPARE) return prev;
       return [...prev, id];
     });
   }
 
-  const isComparisonMode = compareMode && compareIds.length === 2;
+  const isComparisonMode = compareMode && compareIds.length >= 2;
 
   const compareIntegrations = useMemo(() => {
     return compareIds
@@ -577,7 +577,7 @@ export default function PublicIntegrationsPage() {
 
             <p className="mt-2 text-[12px] leading-5 text-[#626875]">
               {compareMode
-                ? `Check exactly two integrations to compare them. ${compareIds.length}/2 selected.`
+                ? `Check 2 or 3 integrations to compare them. ${compareIds.length} of ${MAX_COMPARE} selected.`
                 : "Click an integration to view details."}
             </p>
 
@@ -587,7 +587,7 @@ export default function PublicIntegrationsPage() {
                   integration.integration_id
                 );
                 const isCompareDisabled =
-                  compareMode && !isChecked && compareIds.length >= 2;
+                  compareMode && !isChecked && compareIds.length >= MAX_COMPARE;
                 const isSelected =
                   !compareMode &&
                   selectedIntegration?.integration_id ===
@@ -675,13 +675,26 @@ export default function PublicIntegrationsPage() {
                   </h2>
                   <p className="mt-3 text-[16px] leading-6 text-[#626875]">
                     Comparing{" "}
-                    <span className="font-semibold text-[#080808]">
-                      {compareIntegrations[0]?.integration_name}
-                    </span>{" "}
-                    and{" "}
-                    <span className="font-semibold text-[#080808]">
-                      {compareIntegrations[1]?.integration_name}
-                    </span>
+                    {compareIntegrations.map((integration, idx) => {
+                      const isLast = idx === compareIntegrations.length - 1;
+                      const oxford = compareIntegrations.length > 2;
+                      let separator = "";
+                      if (idx > 0) {
+                        separator = isLast
+                          ? oxford
+                            ? ", and "
+                            : " and "
+                          : ", ";
+                      }
+                      return (
+                        <span key={integration.integration_id}>
+                          {separator}
+                          <span className="font-semibold text-[#080808]">
+                            {integration.integration_name}
+                          </span>
+                        </span>
+                      );
+                    })}
                     .
                   </p>
                   <p className="mt-3 text-[13px] text-[#626875]">
@@ -706,97 +719,113 @@ export default function PublicIntegrationsPage() {
                           </h3>
                         </div>
 
-                        <div className="overflow-hidden rounded-xl border border-[#E2E6ED]">
-                          <div className="grid grid-cols-[1.4fr_1fr_1fr] bg-[#FAFBFC] text-[13px] font-bold uppercase tracking-[0.08em] text-[#626875]">
-                            <div className="border-r border-[#E2E6ED] px-4 py-3">
-                              Feature
-                            </div>
-                            <div className="border-r border-[#E2E6ED] px-4 py-3">
-                              {compareIntegrations[0]?.integration_name}
-                            </div>
-                            <div className="px-4 py-3">
-                              {compareIntegrations[1]?.integration_name}
-                            </div>
-                          </div>
-
-                          {group.items.map((item) => {
-                            const hasDescription = !!item.description?.trim();
-                            const isExpanded = expandedFeatures.has(
-                              item.feature_id
-                            );
-                            const descriptionId = `comparison-desc-${item.feature_id}`;
-
-                            return (
-                              <div
-                                key={item.feature_id}
-                                className="border-t border-[#E2E6ED]"
-                              >
-                                <div className="grid grid-cols-[1.4fr_1fr_1fr] text-[15px]">
-                                  <div className="border-r border-[#E2E6ED]">
-                                    {hasDescription ? (
-                                      <button
-                                        type="button"
-                                        onClick={() =>
-                                          toggleExpanded(item.feature_id)
-                                        }
-                                        aria-expanded={isExpanded}
-                                        aria-controls={descriptionId}
-                                        className="flex h-full w-full items-center justify-between gap-3 px-4 py-3 text-left font-medium text-[#080808] transition hover:bg-[#FAFBFC]"
-                                      >
-                                        <span>{item.feature_name}</span>
-                                        <ChevronIcon expanded={isExpanded} />
-                                      </button>
-                                    ) : (
-                                      <div className="px-4 py-3 font-medium text-[#080808]">
-                                        {item.feature_name}
-                                      </div>
-                                    )}
-                                  </div>
-
-                                  <div
-                                    className={`border-r border-[#E2E6ED] px-4 py-3 font-medium ${
-                                      item.firstStatus === "supported"
-                                        ? "text-[#080808]"
-                                        : item.firstStatus === "planned"
-                                        ? "text-[#92400E]"
-                                        : "text-[#7F8794]"
-                                    }`}
-                                  >
-                                    {item.firstStatus === "supported"
-                                      ? "Supported"
-                                      : item.firstStatus === "planned"
-                                      ? "Planned"
-                                      : "Not Supported"}
-                                  </div>
-                                  <div
-                                    className={`px-4 py-3 font-medium ${
-                                      item.secondStatus === "supported"
-                                        ? "text-[#080808]"
-                                        : item.secondStatus === "planned"
-                                        ? "text-[#92400E]"
-                                        : "text-[#7F8794]"
-                                    }`}
-                                  >
-                                    {item.secondStatus === "supported"
-                                      ? "Supported"
-                                      : item.secondStatus === "planned"
-                                      ? "Planned"
-                                      : "Not Supported"}
-                                  </div>
-                                </div>
-
-                                {hasDescription && isExpanded && (
-                                  <div
-                                    id={descriptionId}
-                                    className="border-t border-[#E2E6ED] bg-[#FAFBFC] px-4 py-3 text-[14px] leading-6 text-[#626875]"
-                                  >
-                                    {item.description}
-                                  </div>
-                                )}
+                        {(() => {
+                          const N = compareIntegrations.length;
+                          // Dynamic grid: feature column + N integration columns.
+                          // Use minmax so columns don't crush below readable width;
+                          // outer wrapper scrolls horizontally when content overflows.
+                          const gridStyle = {
+                            gridTemplateColumns: `minmax(220px, 1.4fr) ${"minmax(140px, 1fr) ".repeat(N).trim()}`,
+                          } as const;
+                          const minTableWidth = `${220 + 160 * N}px`;
+                          return (
+                        <div className="overflow-x-auto">
+                          <div
+                            className="overflow-hidden rounded-xl border border-[#E2E6ED]"
+                            style={{ minWidth: minTableWidth }}
+                          >
+                            <div
+                              className="grid bg-[#FAFBFC] text-[13px] font-bold uppercase tracking-[0.08em] text-[#626875]"
+                              style={gridStyle}
+                            >
+                              <div className="border-r border-[#E2E6ED] px-4 py-3">
+                                Feature
                               </div>
-                            );
-                          })}
+                              {compareIntegrations.map((integration, idx) => (
+                                <div
+                                  key={integration.integration_id}
+                                  className={`px-4 py-3 ${
+                                    idx < N - 1 ? "border-r border-[#E2E6ED]" : ""
+                                  }`}
+                                >
+                                  {integration.integration_name}
+                                </div>
+                              ))}
+                            </div>
+
+                            {group.items.map((item) => {
+                              const hasDescription = !!item.description?.trim();
+                              const isExpanded = expandedFeatures.has(
+                                item.feature_id
+                              );
+                              const descriptionId = `comparison-desc-${item.feature_id}`;
+
+                              return (
+                                <div
+                                  key={item.feature_id}
+                                  className="border-t border-[#E2E6ED]"
+                                >
+                                  <div className="grid text-[15px]" style={gridStyle}>
+                                    <div className="border-r border-[#E2E6ED]">
+                                      {hasDescription ? (
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            toggleExpanded(item.feature_id)
+                                          }
+                                          aria-expanded={isExpanded}
+                                          aria-controls={descriptionId}
+                                          className="flex h-full w-full items-center justify-between gap-3 px-4 py-3 text-left font-medium text-[#080808] transition hover:bg-[#FAFBFC]"
+                                        >
+                                          <span>{item.feature_name}</span>
+                                          <ChevronIcon expanded={isExpanded} />
+                                        </button>
+                                      ) : (
+                                        <div className="px-4 py-3 font-medium text-[#080808]">
+                                          {item.feature_name}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {item.statuses.map((status, idx) => (
+                                      <div
+                                        key={idx}
+                                        className={`px-4 py-3 font-medium ${
+                                          idx < N - 1
+                                            ? "border-r border-[#E2E6ED]"
+                                            : ""
+                                        } ${
+                                          status === "supported"
+                                            ? "text-[#080808]"
+                                            : status === "planned"
+                                            ? "text-[#92400E]"
+                                            : "text-[#7F8794]"
+                                        }`}
+                                      >
+                                        {status === "supported"
+                                          ? "Supported"
+                                          : status === "planned"
+                                          ? "Planned"
+                                          : "Not Supported"}
+                                      </div>
+                                    ))}
+                                  </div>
+
+                                  {hasDescription && isExpanded && (
+                                    <div
+                                      id={descriptionId}
+                                      className="border-t border-[#E2E6ED] bg-[#FAFBFC] px-4 py-3 text-[14px] leading-6 text-[#626875]"
+                                    >
+                                      {item.description}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
+                          );
+                        })()}
                       </section>
                     ))
                   )}
@@ -809,17 +838,17 @@ export default function PublicIntegrationsPage() {
                     Comparison mode
                   </p>
                   <h2 className="mt-2 text-[30px] font-bold leading-tight text-[#080808]">
-                    Choose two integrations to compare
+                    Choose 2 or 3 integrations to compare
                   </h2>
                   <p className="mt-3 max-w-3xl text-[16px] leading-6 text-[#626875]">
-                    Pick exactly two integrations from the sidebar.
+                    Pick 2 or 3 integrations from the sidebar.
                     {compareIds.length === 1 && (
                       <>
                         {" "}
                         <span className="font-semibold text-[#080808]">
                           {compareIntegrations[0]?.integration_name}
                         </span>{" "}
-                        is selected — pick one more to begin.
+                        is selected — pick at least one more to begin.
                       </>
                     )}
                   </p>
@@ -827,9 +856,9 @@ export default function PublicIntegrationsPage() {
 
                 <div className="mt-8 rounded-xl border border-dashed border-[#D7DCE5] bg-[#FAFBFC] px-5 py-8 text-[16px] text-[#626875]">
                   {compareIds.length === 0
-                    ? "No integrations selected yet."
+                    ? "No integrations selected yet. Pick 2 or 3 from the sidebar."
                     : compareIds.length === 1
-                    ? "1 selected. Choose one more."
+                    ? "1 selected. Pick at least one more (up to 3 total)."
                     : "Loading..."}
                 </div>
               </>
