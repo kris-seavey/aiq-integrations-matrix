@@ -34,6 +34,14 @@ type SupportRecord = {
   customer_facing_override: string | null;
 };
 
+type FeatureStatus = "supported" | "planned" | "not_supported";
+
+function toFeatureStatus(raw: string | null | undefined): FeatureStatus {
+  if (raw === "supported") return "supported";
+  if (raw === "planned") return "planned";
+  return "not_supported";
+}
+
 type DisplayFeatureRow = {
   feature_id: string;
   feature_name: string;
@@ -42,7 +50,7 @@ type DisplayFeatureRow = {
   feature_order: number;
   section_name: string;
   section_order: number;
-  isSupported: boolean;
+  status: FeatureStatus;
 };
 
 type ComparisonFeatureRow = {
@@ -52,8 +60,8 @@ type ComparisonFeatureRow = {
   feature_order: number;
   section_name: string;
   section_order: number;
-  firstSupported: boolean;
-  secondSupported: boolean;
+  firstStatus: FeatureStatus;
+  secondStatus: FeatureStatus;
 };
 
 type GroupedRow = {
@@ -222,7 +230,7 @@ export default function PublicIntegrationsPage() {
         feature_order: feature.display_order ?? 9999,
         section_name: section?.section_name ?? "Other",
         section_order: section?.display_order ?? 9999,
-        isSupported: support?.support_status === "supported",
+        status: toFeatureStatus(support?.support_status),
       };
     });
 
@@ -266,10 +274,12 @@ export default function PublicIntegrationsPage() {
         feature_order: feature.display_order ?? 9999,
         section_name: section?.section_name ?? "Other",
         section_order: section?.display_order ?? 9999,
-        firstSupported:
-          supportMap.get(`${ids[0]}:${feature.feature_id}`)?.support_status === "supported",
-        secondSupported:
-          supportMap.get(`${ids[1]}:${feature.feature_id}`)?.support_status === "supported",
+        firstStatus: toFeatureStatus(
+          supportMap.get(`${ids[0]}:${feature.feature_id}`)?.support_status
+        ),
+        secondStatus: toFeatureStatus(
+          supportMap.get(`${ids[1]}:${feature.feature_id}`)?.support_status
+        ),
       };
     });
 
@@ -338,7 +348,7 @@ export default function PublicIntegrationsPage() {
         feature_order: feature.display_order ?? 9999,
         section_name: section?.section_name ?? "Other",
         section_order: section?.display_order ?? 9999,
-        isSupported: true,
+        status: "supported",
       } satisfies DisplayFeatureRow;
     });
   }, [allFeatures, allSections]);
@@ -346,7 +356,9 @@ export default function PublicIntegrationsPage() {
   const visibleRows = useMemo(() => {
     if (!selectedIntegration) return overviewRows;
     if (viewAllFeatures) return rows;
-    return rows.filter((row) => row.isSupported);
+    return rows.filter(
+      (row) => row.status === "supported" || row.status === "planned"
+    );
   }, [overviewRows, rows, selectedIntegration, viewAllFeatures]);
 
   const grouped = useMemo(() => {
@@ -398,11 +410,15 @@ export default function PublicIntegrationsPage() {
   }, [comparisonRows]);
 
   const supportedCount = useMemo(() => {
-    return rows.filter((row) => row.isSupported).length;
+    return rows.filter((row) => row.status === "supported").length;
+  }, [rows]);
+
+  const plannedCount = useMemo(() => {
+    return rows.filter((row) => row.status === "planned").length;
   }, [rows]);
 
   const unsupportedCount = useMemo(() => {
-    return rows.filter((row) => !row.isSupported).length;
+    return rows.filter((row) => row.status === "not_supported").length;
   }, [rows]);
 
   return (
@@ -634,22 +650,34 @@ export default function PublicIntegrationsPage() {
 
                                   <div
                                     className={`border-r border-[#E2E6ED] px-4 py-3 font-medium ${
-                                      item.firstSupported
+                                      item.firstStatus === "supported"
                                         ? "text-[#080808]"
+                                        : item.firstStatus === "planned"
+                                        ? "text-[#92400E]"
                                         : "text-[#7F8794]"
                                     }`}
                                   >
-                                    {item.firstSupported ? "Supported" : "Not Supported"}
+                                    {item.firstStatus === "supported"
+                                      ? "Supported"
+                                      : item.firstStatus === "planned"
+                                      ? "Planned"
+                                      : "Not Supported"}
                                   </div>
 
                                   <div
                                     className={`px-4 py-3 font-medium ${
-                                      item.secondSupported
+                                      item.secondStatus === "supported"
                                         ? "text-[#080808]"
+                                        : item.secondStatus === "planned"
+                                        ? "text-[#92400E]"
                                         : "text-[#7F8794]"
                                     }`}
                                   >
-                                    {item.secondSupported ? "Supported" : "Not Supported"}
+                                    {item.secondStatus === "supported"
+                                      ? "Supported"
+                                      : item.secondStatus === "planned"
+                                      ? "Planned"
+                                      : "Not Supported"}
                                   </div>
                                 </div>
 
@@ -704,6 +732,12 @@ export default function PublicIntegrationsPage() {
                         <span className="rounded-full bg-[#EDF0FF] px-3 py-1.5 text-[13px] font-medium text-[#6262F5]">
                           {supportedCount} supported
                         </span>
+
+                        {plannedCount > 0 && (
+                          <span className="rounded-full bg-[#FEF3C7] px-3 py-1.5 text-[13px] font-medium text-[#92400E]">
+                            {plannedCount} planned
+                          </span>
+                        )}
 
                         {viewAllFeatures && (
                           <span className="rounded-full bg-[#F4F6FA] px-3 py-1.5 text-[13px] font-medium text-[#626875]">
@@ -810,7 +844,10 @@ function FeatureList({
                 {group.section_name}
               </h3>
               <span className="text-[13px] font-medium text-[#626875]">
-                {group.items.filter((item) => item.isSupported).length} supported
+                {group.items.filter((item) => item.status === "supported").length} supported
+                {group.items.filter((item) => item.status === "planned").length > 0
+                  ? ` · ${group.items.filter((item) => item.status === "planned").length} planned`
+                  : ""}
                 {viewAllFeatures ? ` · ${group.items.length} total` : ""}
               </span>
             </div>
@@ -821,9 +858,21 @@ function FeatureList({
                 const isExpanded = expandedFeatures.has(item.feature_id);
                 const descriptionId = `feature-desc-${item.feature_id}`;
                 const borderTop = idx === 0 ? "" : "border-t border-[#E2E6ED]";
-                const labelClass = item.isSupported
-                  ? "text-[#080808]"
-                  : "text-[#7F8794]";
+                const labelClass =
+                  item.status === "not_supported"
+                    ? "text-[#7F8794]"
+                    : "text-[#080808]";
+
+                const statusBadge =
+                  item.status === "planned" ? (
+                    <span className="rounded-full bg-[#FEF3C7] px-2 py-0.5 text-[12px] font-medium text-[#92400E]">
+                      Planned
+                    </span>
+                  ) : item.status === "not_supported" ? (
+                    <span className="rounded-full bg-[#F4F6FA] px-2 py-0.5 text-[12px] font-medium text-[#7F8794]">
+                      Not supported
+                    </span>
+                  ) : null;
 
                 return (
                   <li key={item.feature_id} className={borderTop}>
@@ -839,11 +888,7 @@ function FeatureList({
                           <span className={`text-[16px] leading-6 ${labelClass}`}>
                             {item.label}
                           </span>
-                          {!item.isSupported && (
-                            <span className="rounded-full bg-[#F4F6FA] px-2 py-0.5 text-[12px] font-medium text-[#7F8794]">
-                              Not supported
-                            </span>
-                          )}
+                          {statusBadge}
                         </span>
                         <ChevronIcon expanded={isExpanded} />
                       </button>
@@ -852,11 +897,7 @@ function FeatureList({
                         <span className={`text-[16px] leading-6 ${labelClass}`}>
                           {item.label}
                         </span>
-                        {!item.isSupported && (
-                          <span className="rounded-full bg-[#F4F6FA] px-2 py-0.5 text-[12px] font-medium text-[#7F8794]">
-                            Not supported
-                          </span>
-                        )}
+                        {statusBadge}
                       </div>
                     )}
 

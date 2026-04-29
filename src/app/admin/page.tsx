@@ -652,6 +652,7 @@ export default function AdminPage() {
                               <option value="supported">supported</option>
                               <option value="partial">partial</option>
                               <option value="planned">planned</option>
+                              <option value="decommissioned">decommissioned</option>
                               <option value="not_supported">not_supported</option>
                               <option value="unknown">unknown</option>
                             </select>
