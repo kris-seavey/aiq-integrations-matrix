@@ -623,14 +623,14 @@ export default function AdminPage() {
                       {group.rows.map((row) => (
                         <div
                           key={row.feature_id}
-                          className="grid grid-cols-1 gap-4 rounded-xl border border-[#E2E6ED] bg-white p-4 2xl:grid-cols-[minmax(260px,1.5fr)_170px_minmax(260px,1.4fr)]"
+                          className="grid grid-cols-1 items-start gap-4 rounded-xl border border-[#E2E6ED] bg-white p-4 2xl:grid-cols-[minmax(280px,2fr)_180px_minmax(220px,1.5fr)]"
                         >
                           <div>
-                            <div className="font-semibold text-[#080808]">
+                            <label className="mb-1 block text-[11px] uppercase tracking-wide text-[#626875]">
+                              Feature
+                            </label>
+                            <div className="text-sm font-semibold text-[#080808]">
                               {row.feature_name}
-                            </div>
-                            <div className="mt-1 text-xs text-[#8B93A1]">
-                              Canonical feature label
                             </div>
                           </div>
 
@@ -647,7 +647,7 @@ export default function AdminPage() {
                                   e.target.value
                                 )
                               }
-                              className="w-full rounded-xl border border-[#E2E6ED] bg-white px-3 py-2 text-sm text-[#080808] outline-none focus:border-[#6262F5]"
+                              className="h-10 w-full rounded-xl border border-[#E2E6ED] bg-white px-3 text-sm text-[#080808] outline-none focus:border-[#6262F5]"
                             >
                               <option value="supported">supported</option>
                               <option value="partial">partial</option>
@@ -660,7 +660,7 @@ export default function AdminPage() {
 
                           <div>
                             <label className="mb-1 block text-[11px] uppercase tracking-wide text-[#626875]">
-                              Docs wording override
+                              Docs wording (optional)
                             </label>
                             <input
                               value={row.customer_facing_override}
@@ -671,12 +671,9 @@ export default function AdminPage() {
                                   e.target.value
                                 )
                               }
-                              placeholder="Optional customer-facing wording"
-                              className="w-full rounded-xl border border-[#E2E6ED] bg-white px-3 py-2 text-sm text-[#080808] placeholder:text-[#A2A6AE] outline-none focus:border-[#6262F5]"
+                              placeholder="Custom label for this integration"
+                              className="h-10 w-full rounded-xl border border-[#E2E6ED] bg-white px-3 text-sm text-[#080808] placeholder:text-[#A2A6AE] outline-none focus:border-[#6262F5]"
                             />
-                            <p className="mt-1 text-[11px] text-[#8B93A1]">
-                              Leave blank to use the canonical feature label.
-                            </p>
                           </div>
                         </div>
                       ))}
