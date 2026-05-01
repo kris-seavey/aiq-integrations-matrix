@@ -685,7 +685,7 @@ export default function AdminPage() {
             </button>
           </div>
 
-          {/* Integration metadata editor (Phase 1).
+          {/* Integration settings editor (Phase 1).
               Edits the integrations row directly — separate save flow
               from the feature support editor below. */}
           {selectedIntegration && metadataDraft && (
@@ -693,12 +693,12 @@ export default function AdminPage() {
               <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h3 className="text-lg font-semibold text-[#080808]">
-                    Integration metadata
+                    Settings for {selectedIntegration.integration_name}
                   </h3>
-                  <p className="mt-1 text-xs text-[#8B93A1]">
-                    Edits to <code>integrations.category</code> and{" "}
-                    <code>integrations.public_visibility</code>. Saved
-                    independently from feature support changes.
+                  <p className="mt-1 text-xs text-[#626875]">
+                    Change how this integration is displayed on the public
+                    matrix. Saves independently from the feature changes
+                    below.
                   </p>
                 </div>
                 <button
@@ -706,7 +706,7 @@ export default function AdminPage() {
                   disabled={metadataSaving}
                   className="rounded-full bg-[#6262F5] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#5555E8] disabled:opacity-60"
                 >
-                  {metadataSaving ? "Saving..." : "Save metadata"}
+                  {metadataSaving ? "Saving..." : "Save settings"}
                 </button>
               </div>
 
