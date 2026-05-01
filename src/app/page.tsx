@@ -65,6 +65,27 @@ type ComparisonFeatureRow = {
 
 const MAX_COMPARE = 3;
 
+// Display order when sorting integrations by type. Any category that
+// appears in the data but is not in this list will fall to the end,
+// alphabetically among themselves, so unexpected categories don't
+// silently disappear from the sidebar.
+const CATEGORY_ORDER = [
+  "POS / Ecommerce",
+  "POS",
+  "Ecommerce",
+  "Datalake / Files",
+  "1st Party Data",
+  "Email",
+  "Other",
+] as const;
+
+type SortMode = "az" | "type";
+
+type CategoryGroup = {
+  category: string;
+  integrations: Integration[];
+};
+
 type GroupedRow = {
   section_name: string;
   section_order: number;
@@ -151,6 +172,7 @@ export default function PublicIntegrationsPage() {
   const [compareMode, setCompareMode] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [viewAllFeatures, setViewAllFeatures] = useState(false);
+  const [sortMode, setSortMode] = useState<SortMode>("az");
 
   const [expandedFeatures, setExpandedFeatures] = useState<Set<string>>(
     new Set()
@@ -394,6 +416,33 @@ export default function PublicIntegrationsPage() {
     });
   }, [integrations, search]);
 
+  // Group filtered integrations by category in CATEGORY_ORDER for the
+  // "type" sort mode. Any category not in CATEGORY_ORDER lands at the
+  // end, alphabetized among itself.
+  const integrationsByCategory = useMemo<CategoryGroup[]>(() => {
+    const buckets = new Map<string, Integration[]>();
+    for (const integration of filteredIntegrations) {
+      const cat = integration.category || "Other";
+      if (!buckets.has(cat)) buckets.set(cat, []);
+      buckets.get(cat)!.push(integration);
+    }
+    const result: CategoryGroup[] = [];
+    for (const cat of CATEGORY_ORDER) {
+      const list = buckets.get(cat);
+      if (list && list.length > 0) {
+        result.push({ category: cat, integrations: list });
+        buckets.delete(cat);
+      }
+    }
+    const leftovers = [...buckets.entries()].sort((a, b) =>
+      a[0].localeCompare(b[0])
+    );
+    for (const [cat, list] of leftovers) {
+      result.push({ category: cat, integrations: list });
+    }
+    return result;
+  }, [filteredIntegrations]);
+
   const overviewRows = useMemo(() => {
     const sectionMap = new Map(
       allSections.map((section) => [section.section_id, section])
@@ -481,6 +530,71 @@ export default function PublicIntegrationsPage() {
     () => rows.filter((r) => r.status === "not_supported").length,
     [rows]
   );
+
+  // Renders a single integration card. Used both in flat A-Z mode and
+  // inside category sections in Type mode. When hideCategory is true,
+  // the secondary category line is omitted (since the section header
+  // already conveys it).
+  function renderIntegrationCard(
+    integration: Integration,
+    opts: { hideCategory?: boolean } = {}
+  ) {
+    const isChecked = compareIds.includes(integration.integration_id);
+    const isCompareDisabled =
+      compareMode && !isChecked && compareIds.length >= MAX_COMPARE;
+    const isSelected =
+      !compareMode &&
+      selectedIntegration?.integration_id === integration.integration_id;
+
+    return (
+      <button
+        key={integration.integration_id}
+        type="button"
+        onClick={() => {
+          if (compareMode) {
+            if (!isCompareDisabled) {
+              toggleCompare(integration.integration_id);
+            }
+          } else {
+            loadIntegration(integration);
+          }
+        }}
+        disabled={isCompareDisabled}
+        className={`block w-full rounded-xl border text-left transition ${
+          isSelected
+            ? "border-[#6262F5] bg-[#6262F5] text-white"
+            : isChecked
+            ? "border-[#6262F5] bg-[#EDF0FF] text-[#080808]"
+            : isCompareDisabled
+            ? "cursor-not-allowed border-[#E2E6ED] bg-[#FAFBFC] text-[#A2A6AE] opacity-60"
+            : "border-[#E2E6ED] bg-white text-[#080808] hover:border-[#C9D2E3] hover:bg-[#F4F6FA]"
+        }`}
+      >
+        <div className="flex items-start gap-3 px-4 py-3">
+          {compareMode && (
+            <CheckboxIndicator
+              checked={isChecked}
+              disabled={isCompareDisabled}
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <div className="text-[16px] font-semibold leading-5">
+              {integration.integration_name}
+            </div>
+            {!opts.hideCategory && (
+              <div
+                className={`mt-1 text-[13px] ${
+                  isSelected ? "text-white/90" : "text-[#626875]"
+                }`}
+              >
+                {categoryLabel(integration.category)}
+              </div>
+            )}
+          </div>
+        </div>
+      </button>
+    );
+  }
 
   return (
     <main className="min-h-screen bg-[#6262F5]">
@@ -581,72 +695,72 @@ export default function PublicIntegrationsPage() {
                 : "Click an integration to view details."}
             </p>
 
-            <div className="mt-3 space-y-2">
-              {filteredIntegrations.map((integration) => {
-                const isChecked = compareIds.includes(
-                  integration.integration_id
-                );
-                const isCompareDisabled =
-                  compareMode && !isChecked && compareIds.length >= MAX_COMPARE;
-                const isSelected =
-                  !compareMode &&
-                  selectedIntegration?.integration_id ===
-                    integration.integration_id;
-
-                return (
-                  <button
-                    key={integration.integration_id}
-                    type="button"
-                    onClick={() => {
-                      if (compareMode) {
-                        if (!isCompareDisabled) {
-                          toggleCompare(integration.integration_id);
-                        }
-                      } else {
-                        loadIntegration(integration);
-                      }
-                    }}
-                    disabled={isCompareDisabled}
-                    className={`block w-full rounded-xl border text-left transition ${
-                      isSelected
-                        ? "border-[#6262F5] bg-[#6262F5] text-white"
-                        : isChecked
-                        ? "border-[#6262F5] bg-[#EDF0FF] text-[#080808]"
-                        : isCompareDisabled
-                        ? "cursor-not-allowed border-[#E2E6ED] bg-[#FAFBFC] text-[#A2A6AE] opacity-60"
-                        : "border-[#E2E6ED] bg-white text-[#080808] hover:border-[#C9D2E3] hover:bg-[#F4F6FA]"
-                    }`}
-                  >
-                    <div className="flex items-start gap-3 px-4 py-3">
-                      {compareMode && (
-                        <CheckboxIndicator
-                          checked={isChecked}
-                          disabled={isCompareDisabled}
-                        />
-                      )}
-                      <div className="min-w-0 flex-1">
-                        <div className="text-[16px] font-semibold leading-5">
-                          {integration.integration_name}
-                        </div>
-                        <div
-                          className={`mt-1 text-[13px] ${
-                            isSelected ? "text-white/90" : "text-[#626875]"
-                          }`}
-                        >
-                          {categoryLabel(integration.category)}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })}
-
-              {!loading && filteredIntegrations.length === 0 && (
-                <div className="rounded-xl border border-dashed border-[#D7DCE5] bg-[#FAFBFC] px-4 py-5 text-[14px] text-[#626875]">
-                  No integrations match your search.
-                </div>
-              )}
+            {/* Sort toggle */}
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#626875]">
+                Sort
+              </span>
+              <div className="flex rounded-full border border-[#E2E6ED] bg-white p-0.5">
+                <button
+                  type="button"
+                  onClick={() => setSortMode("az")}
+                  aria-pressed={sortMode === "az"}
+                  className={`rounded-full px-3 py-1 text-[12px] font-semibold transition ${
+                    sortMode === "az"
+                      ? "bg-[#6262F5] text-white"
+                      : "text-[#626875] hover:text-[#080808]"
+                  }`}
+                >
+                  A–Z
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSortMode("type")}
+                  aria-pressed={sortMode === "type"}
+                  className={`rounded-full px-3 py-1 text-[12px] font-semibold transition ${
+                    sortMode === "type"
+                      ? "bg-[#6262F5] text-white"
+                      : "text-[#626875] hover:text-[#080808]"
+                  }`}
+                >
+                  Type
+                </button>
+              </div>
             </div>
+
+            {!loading && filteredIntegrations.length === 0 ? (
+              <div className="mt-3 rounded-xl border border-dashed border-[#D7DCE5] bg-[#FAFBFC] px-4 py-5 text-[14px] text-[#626875]">
+                No integrations match your search.
+              </div>
+            ) : sortMode === "type" ? (
+              <div className="mt-4 space-y-5">
+                {integrationsByCategory.map((group) => (
+                  <div key={group.category}>
+                    <div className="mb-2 flex items-baseline justify-between">
+                      <h3 className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#626875]">
+                        {group.category}
+                      </h3>
+                      <span className="text-[11px] font-medium text-[#626875]">
+                        {group.integrations.length}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {group.integrations.map((integration) =>
+                        renderIntegrationCard(integration, {
+                          hideCategory: true,
+                        })
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3 space-y-2">
+                {filteredIntegrations.map((integration) =>
+                  renderIntegrationCard(integration)
+                )}
+              </div>
+            )}
 
             {compareMode && compareIds.length > 0 && (
               <button
