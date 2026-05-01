@@ -30,6 +30,39 @@ Current values: `supported`, `partial`, `planned`, `decommissioned`, `not_suppor
 
 **Fix path:** Either wire it up with a trigger (write a function that captures OLD/NEW values into `integration_change_log` on every UPDATE of `integration_feature_support`), or drop the table. Don't let the half-built scaffold linger indefinitely.
 
+### Four tables have RLS disabled entirely — anonymous read/write is wide open.
+
+**Concern:** `integration_change_log`, `intercom_article_registry`, `intercom_master_article_registry`, and `product_areas` all show as `UNRESTRICTED` in the Supabase Table Editor — meaning Row Level Security is *off* on these tables. Combined with the default `GRANT ALL TO anon` permissions in `public` schema, this means anyone with the project's anon key (which is exposed in every shipped Vercel bundle, by design) can read and write to these tables via the Supabase REST API.
+
+The exposure is mostly theoretical today — these table names aren't documented anywhere a customer would see them — but it's not a defensible long-term posture.
+
+**Fix path:** Enable RLS on each, then add explicit policies for the access patterns those tables need.
+
+```sql
+-- Lock down the audit log: writes only via triggers (service role), reads only by authenticated.
+ALTER TABLE public.integration_change_log ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "authenticated can read change log"
+  ON public.integration_change_log FOR SELECT TO authenticated USING (true);
+
+-- Lock down Intercom registries: writes only via edge functions (service role), reads only by authenticated.
+ALTER TABLE public.intercom_article_registry ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "authenticated can read intercom article registry"
+  ON public.intercom_article_registry FOR SELECT TO authenticated USING (true);
+
+ALTER TABLE public.intercom_master_article_registry ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "authenticated can read intercom master article registry"
+  ON public.intercom_master_article_registry FOR SELECT TO authenticated USING (true);
+
+-- product_areas: enable RLS and add anon read + authenticated CRUD if/when surfaced.
+ALTER TABLE public.product_areas ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "anon can read product_areas"
+  ON public.product_areas FOR SELECT TO anon USING (true);
+CREATE POLICY "authenticated can read product_areas"
+  ON public.product_areas FOR SELECT TO authenticated USING (true);
+```
+
+The edge function uses `SUPABASE_SERVICE_ROLE_KEY`, which bypasses RLS, so locking these tables down doesn't break the publish flow. Triggers also run as the table owner, which bypasses RLS — so the audit log writes (if/when wired up) will work too.
+
 ### `is_active` boolean flags on `features`, `sections`, `product_areas`, `integrations` are unused.
 
 **Concern:** These columns exist as a soft-delete escape hatch, but no view, query, or RLS policy filters by them. Setting `is_active = false` does nothing visible.
@@ -52,7 +85,7 @@ Current values: `supported`, `partial`, `planned`, `decommissioned`, `not_suppor
 
 **Concern:** `integrations.category`, `integrations.status`, `integrations.notes`, `integrations.public_visibility`, `integrations.docs_slug`, `integrations.owner_team` all require SQL to change. The admin UI only edits the join table.
 
-**Fix path:** Add a per-integration metadata-edit panel to `src/app/admin/page.tsx`. Lower priority than feature support editing, but high-value for letting Product self-serve label cleanups (like the "POS / Ecommerce" recategorization we did manually).
+**Fix path:** Add a per-integration metadata-edit panel to `src/app/admin/page.tsx`. **High priority** for letting Product self-serve. Empirically, category reshuffles have come up at least four times during initial development (`sql/recategorize_integrations_pos.sql`, `sql/recategorize_ecom_only.sql`, the 365 Cannabis fix, `sql/recategorize_woo_bigcommerce.sql`) — strong signal this is a recurring workflow that shouldn't require an engineer.
 
 ### `features.description` was populated via one-time CSV import.
 
@@ -209,6 +242,79 @@ The admin's save action does `upsert(payload, { onConflict: 'integration_id,feat
 **Concern:** If the publish fails (Intercom API down, key invalid, view error, etc.), the change to `integration_feature_support` still persists locally. The article just doesn't update. There's no notification.
 
 **Fix path:** Wire the edge function to log failures to a notification channel (Slack webhook, email, Intercom support inbox). Alternatively, periodically reconcile the article markdown against the view's current output and alert on drift.
+
+---
+
+## Admin CRUD Build-Out
+
+A four-phase rollout that turns the admin from a feature-support-only tool into a full Product self-service surface. Each phase ships independently.
+
+### Architectural decisions (locked in)
+
+These are the answers to the five upfront decisions documented during Phase 1 planning. Any future engineer or Product owner picking up this work should be aware of them.
+
+**1. Soft delete by default.** Hard `DELETE` cascades through `integration_feature_support` and republishes pruned articles to Intercom. Instead, "remove" actions in the admin UI should set `is_active = false` on the relevant table. Queries that drive the consumer page and Intercom views should filter `WHERE is_active = TRUE`. The `is_active` columns already exist on `features`, `sections`, `product_areas`, and `integrations` (this finally puts them to use). Hard delete remains available for engineers via service-role SQL for the rare scrub case.
+
+**2. Auto-slugify with duplicate check** for ID generation. New integration/feature/section IDs are auto-generated from the name (`"Blaze Ecom" → "blaze-ecom"`). Before insert, the UI checks the database for collision. If a duplicate exists, the user is prompted to either edit the proposed slug or pick a different name. IDs remain immutable after creation — renaming an integration changes its display name only, not its slug. A standard `slugify(name)` helper should live in `src/lib/slug.ts` once Phase 2 begins.
+
+**3. Separate routes per CRUD area.** `/admin` keeps the feature-support editor and integration metadata panel (Phase 1 surface). Phase 2+ adds `/admin/integrations`, `/admin/features`, `/admin/sections` as their own routes. A small dropdown nav at the top of the `/admin` shell lets admins switch between them.
+
+**4. Empty-by-default new entries, with a friendly reminder prompt.** When an admin creates a new integration or feature, no `integration_feature_support` rows are auto-created — the new entity starts "supported by nothing" and admin fills in support rows from the existing `/admin` editor. To prevent admins from forgetting this last step, the create flow shows a confirmation toast/banner:
+- After creating an integration: *"Make sure you update the status of the Features supported by your added Integration before you leave! :)"*
+- After creating a feature: *"Make sure you update the status of your added Feature on its impacted Integrations before you leave! :)"*
+
+**5. No DB-level uniqueness constraint on `integration_name`.** Different integrations can share base names (the existing data has multiple "POS" / "Ecom" suffix variants like `Blaze POS` and `Blaze Ecom`). Slug uniqueness (decision 2) provides enough collision protection for the primary key, and human-readable name collisions are handled by the user choosing a sufficiently distinct name. We may revisit this if Product wants stricter validation.
+
+### Phase 1 — Edit existing integration metadata ✅
+
+**What it ships:** A metadata panel inside `/admin` for editing `integrations.category` and `integrations.public_visibility` on the currently-selected integration.
+
+**Files involved:**
+- `sql/enable_integrations_metadata_editing.sql` — the single UPDATE policy on `public.integrations`.
+- `src/app/admin/page.tsx` — `CATEGORY_OPTIONS` constant, `MetadataDraft` type, `metadataDraft` / `metadataSaving` state, `saveMetadata()` function, and the metadata-edit panel JSX.
+
+**Status:** Built. Run the SQL once, push the code, test by editing a category in the UI and watching the consumer page sidebar update after refresh.
+
+### Phase 2 — Full integration management (planned)
+
+**What it ships:** A new `/admin/integrations` route with a table of all integrations (active + inactive), a "Create integration" form, and per-row "Mark inactive / Mark active" toggle.
+
+**Required RLS policies (one-time):**
+```sql
+CREATE POLICY "authenticated can insert integrations"
+  ON public.integrations FOR INSERT TO authenticated
+  WITH CHECK (true);
+-- UPDATE policy already exists from Phase 1; covers is_active toggle.
+```
+DELETE policy intentionally omitted — soft-delete via `is_active` is the supported pattern.
+
+**Required schema work:**
+- Update consumer page `loadInitialData()` query to include `WHERE is_active = TRUE` on integrations (or, better, push it into the query: `.eq('is_active', true)`).
+- Update views (`integrations_matrix_export`, `integration_docs_export`) to include `AND i.is_active = TRUE` in their WHERE clauses, so the Intercom article excludes soft-deleted integrations.
+- Update Phase 1 RLS policy to include `WITH CHECK (true)` to permit toggling `is_active`. (Already does; mentioned for completeness.)
+
+**Required UI work:**
+- New route `src/app/admin/integrations/page.tsx`.
+- Navigation dropdown added to `/admin/page.tsx` header — "Edit Feature Support" (current page), "Edit Integrations", "Edit Features", "Edit Sections" (last two grayed out until Phase 3+4).
+- `src/lib/slug.ts` helper: `slugify(name) → string`. Strip non-word characters, lowercase, hyphenate spaces.
+- Create-integration form fields: `integration_name` (text), `category` (dropdown from CATEGORY_OPTIONS), `public_visibility` (toggle), `notes` (textarea, optional).
+- Slug preview: as the user types `integration_name`, show the auto-generated `integration_id` next to it. Allow override before submit.
+- Pre-insert duplicate check: query `integrations.integration_id` for the proposed slug; if it exists, surface "An integration with this ID already exists" and require the user to pick a different name/slug.
+- Friendly post-create banner with the decision-4 reminder text.
+- Per-row "Mark inactive" / "Mark active" button that calls `update({ is_active: false/true })`.
+- Sort/filter controls similar to the consumer page sidebar (A-Z and by category).
+
+**Effort estimate:** ~500 lines of new TypeScript, plus the `<ConfirmDialog>` and toast infrastructure that pays off across Phase 3+4.
+
+### Phase 3 — Manage features (planned)
+
+Same shape as Phase 2, but for the `features` table. Adds an extra concern: each feature has a `section_id` foreign key. The create form needs a section dropdown sourced from the `sections` table. Same soft-delete pattern. Same friendly reminder banner: "*Make sure you update the status of your added Feature on its impacted Integrations before you leave! :)*"
+
+Phase 3 also reintroduces Product's ability to write `features.description`, the field we backfilled from the legacy spreadsheet during initial development. New features get descriptions filled in directly via this UI, eliminating the need for SQL-backed CSV imports.
+
+### Phase 4 — Manage sections (planned, lowest priority)
+
+CRUD for `sections` table. Including `display_order` editing for reordering sections in the matrix. Likely a drag-and-drop list in the UI; a fallback "edit display_order as a number" input is acceptable for v1. Could also be skipped indefinitely and handled via SQL for the rare case where sections genuinely change.
 
 ---
 

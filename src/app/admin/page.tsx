@@ -63,6 +63,27 @@ function categoryLabel(category?: string | null) {
   return category || "Integration";
 }
 
+// Allowed values for the integrations.category field. Keeping this as
+// an enum-style dropdown (not free-form text) prevents the kind of
+// label drift we cleaned up across the recategorize_*.sql migrations.
+// To add a new category, edit this array AND any places in the
+// consumer page that filter or order by category (e.g., CATEGORY_ORDER
+// in src/app/page.tsx).
+const CATEGORY_OPTIONS = [
+  "POS",
+  "Ecommerce",
+  "POS / Ecommerce",
+  "Datalake / Files",
+  "1st Party Data",
+  "Email",
+  "Other",
+] as const;
+
+type MetadataDraft = {
+  category: string;
+  public_visibility: boolean;
+};
+
 export default function AdminPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -78,6 +99,12 @@ export default function AdminPage() {
   const [statusMessage, setStatusMessage] = useState("Loading integrations...");
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+
+  // Metadata editing for the currently-selected integration.
+  // Kept separate from the feature-support `dirty` state so saving
+  // metadata doesn't accidentally save unrelated feature changes.
+  const [metadataDraft, setMetadataDraft] = useState<MetadataDraft | null>(null);
+  const [metadataSaving, setMetadataSaving] = useState(false);
 
   useEffect(() => {
     const loadSession = async () => {
@@ -162,6 +189,10 @@ export default function AdminPage() {
   async function loadIntegration(integration: Integration) {
     setSelectedIntegration(integration);
     setDirty({});
+    setMetadataDraft({
+      category: integration.category ?? "",
+      public_visibility: integration.public_visibility ?? true,
+    });
     setStatusMessage(`Loading ${integration.integration_name}...`);
 
     const [
@@ -354,6 +385,66 @@ export default function AdminPage() {
     setStatusMessage(
       "Saved. Registry updated successfully. Intercom should refresh automatically."
     );
+  }
+
+  async function saveMetadata() {
+    if (!selectedIntegration || !metadataDraft) return;
+
+    const original = {
+      category: selectedIntegration.category ?? "",
+      public_visibility: selectedIntegration.public_visibility ?? true,
+    };
+
+    const hasChanges =
+      metadataDraft.category !== original.category ||
+      metadataDraft.public_visibility !== original.public_visibility;
+
+    if (!hasChanges) {
+      setStatusMessage("No metadata changes to save.");
+      return;
+    }
+
+    setMetadataSaving(true);
+    setStatusMessage("Saving integration metadata...");
+
+    const { data, error } = await supabase
+      .from("integrations")
+      .update({
+        category: metadataDraft.category || null,
+        public_visibility: metadataDraft.public_visibility,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("integration_id", selectedIntegration.integration_id)
+      .select()
+      .single();
+
+    setMetadataSaving(false);
+
+    if (error) {
+      setStatusMessage(`Metadata save failed: ${error.message}`);
+      return;
+    }
+
+    // Refresh local state — both the array and the currently selected ref —
+    // so the sidebar pill and the integration header stay in sync without
+    // a page reload.
+    if (data) {
+      const updated = data as Integration;
+      setSelectedIntegration(updated);
+      setIntegrations((prev) =>
+        prev
+          .map((i) =>
+            i.integration_id === updated.integration_id ? updated : i
+          )
+          .sort((a, b) => a.integration_name.localeCompare(b.integration_name))
+      );
+      setMetadataDraft({
+        category: updated.category ?? "",
+        public_visibility: updated.public_visibility ?? true,
+      });
+    }
+
+    setStatusMessage("Metadata saved.");
   }
 
   const preview = useMemo(() => {
@@ -593,6 +684,105 @@ export default function AdminPage() {
               Save changes
             </button>
           </div>
+
+          {/* Integration metadata editor (Phase 1).
+              Edits the integrations row directly — separate save flow
+              from the feature support editor below. */}
+          {selectedIntegration && metadataDraft && (
+            <div className="mb-6 rounded-2xl border border-[#E2E6ED] bg-[#FAFBFC] p-5">
+              <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-[#080808]">
+                    Integration metadata
+                  </h3>
+                  <p className="mt-1 text-xs text-[#8B93A1]">
+                    Edits to <code>integrations.category</code> and{" "}
+                    <code>integrations.public_visibility</code>. Saved
+                    independently from feature support changes.
+                  </p>
+                </div>
+                <button
+                  onClick={saveMetadata}
+                  disabled={metadataSaving}
+                  className="rounded-full bg-[#6262F5] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[#5555E8] disabled:opacity-60"
+                >
+                  {metadataSaving ? "Saving..." : "Save metadata"}
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)]">
+                <div>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wide text-[#626875]">
+                    Category
+                  </label>
+                  <select
+                    value={metadataDraft.category}
+                    onChange={(e) =>
+                      setMetadataDraft({
+                        ...metadataDraft,
+                        category: e.target.value,
+                      })
+                    }
+                    className="h-10 w-full rounded-xl border border-[#E2E6ED] bg-white px-3 text-sm text-[#080808] outline-none focus:border-[#6262F5]"
+                  >
+                    {/* If the current category isn't in our preset list,
+                        keep it as a selectable option so we don't silently
+                        downgrade it on save. */}
+                    {!CATEGORY_OPTIONS.includes(
+                      metadataDraft.category as (typeof CATEGORY_OPTIONS)[number]
+                    ) &&
+                      metadataDraft.category && (
+                        <option value={metadataDraft.category}>
+                          {metadataDraft.category} (existing)
+                        </option>
+                      )}
+                    {CATEGORY_OPTIONS.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="mb-1 block text-[11px] uppercase tracking-wide text-[#626875]">
+                    Public visibility
+                  </label>
+                  <div className="flex h-10 items-center gap-3 rounded-xl border border-[#E2E6ED] bg-white px-3">
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={metadataDraft.public_visibility}
+                      onClick={() =>
+                        setMetadataDraft({
+                          ...metadataDraft,
+                          public_visibility: !metadataDraft.public_visibility,
+                        })
+                      }
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition ${
+                        metadataDraft.public_visibility
+                          ? "bg-[#6262F5]"
+                          : "bg-[#D6DBE5]"
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition ${
+                          metadataDraft.public_visibility
+                            ? "translate-x-6"
+                            : "translate-x-1"
+                        }`}
+                      />
+                    </button>
+                    <span className="text-sm text-[#080808]">
+                      {metadataDraft.public_visibility
+                        ? "Visible on public matrix"
+                        : "Hidden from public matrix (admin only)"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           {loading ? (
             <div className="rounded-xl border border-[#E2E6ED] bg-[#FAFBFC] px-5 py-6 text-[#626875]">
